@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
-#include "dhcp-client-id-internal.h"
+#include "dhcp-client-id-internal.h" // IWYU pragma: associated
 #include "iovec-util.h"
 #include "json-util.h"
 #include "log.h"

@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
-#include "sd-varlink-idl.h"
+#include "sd-varlink-idl.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "ansi-color.h"
@@ -11,7 +11,7 @@
 #include "strv.h"
 #include "terminal-util.h"
 #include "utf8.h"
-#include "varlink-idl-util.h"
+#include "varlink-idl-util.h" // IWYU pragma: associated
 
 #define DEPTH_MAX 64U
 

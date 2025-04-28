@@ -11,7 +11,7 @@
 #include <threads.h>
 #include <unistd.h>
 
-#include "sd-bus.h"
+#include "sd-bus.h" // IWYU pragma: associated
 
 #include "af-list.h"
 #include "alloc-util.h"

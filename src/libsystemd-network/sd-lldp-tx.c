@@ -6,7 +6,7 @@
 
 #include "sd-event.h"
 #include "sd-id128.h"
-#include "sd-lldp-tx.h"
+#include "sd-lldp-tx.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "ether-addr-util.h"

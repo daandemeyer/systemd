@@ -11,13 +11,13 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
-#include "sd-hwdb.h"
+#include "sd-hwdb.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "fd-util.h"
 #include "fileio.h"
 #include "hashmap.h"
-#include "hwdb-internal.h"
+#include "hwdb-internal.h" // IWYU pragma: associated
 #include "log.h"
 #include "nulstr-util.h"
 #include "string-util.h"

@@ -4,7 +4,7 @@
 #include <poll.h>
 
 #include "sd-daemon.h"
-#include "sd-varlink.h"
+#include "sd-varlink.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "errno-list.h"
@@ -30,7 +30,7 @@
 #include "umask-util.h"
 #include "user-util.h"
 #include "varlink-idl-util.h"
-#include "varlink-internal.h"
+#include "varlink-internal.h" // IWYU pragma: associated
 #include "varlink-io.systemd.h"
 #include "varlink-org.varlink.service.h"
 

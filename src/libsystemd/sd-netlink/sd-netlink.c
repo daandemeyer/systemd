@@ -2,7 +2,7 @@
 
 #include <poll.h>
 
-#include "sd-netlink.h"
+#include "sd-netlink.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "fd-util.h"
@@ -11,7 +11,7 @@
 #include "log.h"
 #include "macro.h"
 #include "netlink-genl.h"
-#include "netlink-internal.h"
+#include "netlink-internal.h" // IWYU pragma: associated
 #include "netlink-slot.h"
 #include "netlink-util.h"
 #include "process-util.h"

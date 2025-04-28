@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
 #include "alloc-util.h"
-#include "dhcp-server-lease-internal.h"
+#include "dhcp-server-lease-internal.h" // IWYU pragma: associated
 #include "fd-util.h"
 #include "fs-util.h"
 #include "iovec-util.h"

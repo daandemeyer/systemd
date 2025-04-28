@@ -6,14 +6,14 @@
 #include <net/if_arp.h>
 #include <sys/ioctl.h>
 
-#include "sd-dhcp-server.h"
+#include "sd-dhcp-server.h" // IWYU pragma: associated
 #include "sd-id128.h"
 
 #include "alloc-util.h"
 #include "dhcp-network.h"
 #include "dhcp-option.h"
 #include "dhcp-packet.h"
-#include "dhcp-server-internal.h"
+#include "dhcp-server-internal.h" // IWYU pragma: associated
 #include "dhcp-server-lease-internal.h"
 #include "dns-domain.h"
 #include "fd-util.h"

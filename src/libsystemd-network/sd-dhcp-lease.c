@@ -10,10 +10,10 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "sd-dhcp-lease.h"
+#include "sd-dhcp-lease.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
-#include "dhcp-lease-internal.h"
+#include "dhcp-lease-internal.h" // IWYU pragma: associated
 #include "dhcp-option.h"
 #include "dns-domain.h"
 #include "dns-resolver-internal.h"

@@ -10,7 +10,7 @@
 
 #include "sd-id128.h"
 #include "sd-ipv4acd.h"
-#include "sd-ipv4ll.h"
+#include "sd-ipv4ll.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "ether-addr-util.h"

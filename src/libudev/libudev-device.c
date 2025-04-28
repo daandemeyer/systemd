@@ -23,7 +23,7 @@
 #include "device-private.h"
 #include "device-util.h"
 #include "errno-util.h"
-#include "libudev-device-internal.h"
+#include "libudev-device-internal.h" // IWYU pragma: associated
 #include "libudev-list-internal.h"
 #include "parse-util.h"
 #include "time-util.h"

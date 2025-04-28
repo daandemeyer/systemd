@@ -5,7 +5,7 @@
 #include <sys/ioctl.h>
 
 #include "sd-json.h"
-#include "sd-lldp-rx.h"
+#include "sd-lldp-rx.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "ether-addr-util.h"
@@ -14,7 +14,7 @@
 #include "hashmap.h"
 #include "lldp-neighbor.h"
 #include "lldp-network.h"
-#include "lldp-rx-internal.h"
+#include "lldp-rx-internal.h" // IWYU pragma: associated
 #include "memory-util.h"
 #include "network-common.h"
 #include "prioq.h"

@@ -6,13 +6,13 @@
 #include <threads.h>
 
 #include "sd-daemon.h"
-#include "sd-event.h"
+#include "sd-event.h" // IWYU pragma: associated
 #include "sd-id128.h"
 #include "sd-messages.h"
 
 #include "alloc-util.h"
 #include "env-util.h"
-#include "event-source.h"
+#include "event-source.h" // IWYU pragma: associated
 #include "fd-util.h"
 #include "fs-util.h"
 #include "glyph-util.h"

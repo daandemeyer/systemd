@@ -7,7 +7,7 @@
 
 #include "alloc-util.h"
 #include "dhcp6-internal.h"
-#include "dhcp6-lease-internal.h"
+#include "dhcp6-lease-internal.h" // IWYU pragma: associated
 #include "dns-domain.h"
 #include "network-common.h"
 #include "sort-util.h"

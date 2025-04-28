@@ -13,7 +13,7 @@
 #include <threads.h>
 #include <unistd.h>
 
-#include "sd-resolve.h"
+#include "sd-resolve.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "dns-def.h"
@@ -26,7 +26,7 @@
 #include "memory-util.h"
 #include "missing_syscall.h"
 #include "process-util.h"
-#include "resolve-private.h"
+#include "resolve-private.h" // IWYU pragma: associated
 #include "socket-util.h"
 
 #define WORKERS_MIN 1U

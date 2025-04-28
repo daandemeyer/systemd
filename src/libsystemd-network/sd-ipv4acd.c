@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "sd-ipv4acd.h"
+#include "sd-ipv4acd.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "arp-util.h"

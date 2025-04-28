@@ -4,7 +4,7 @@
 #include <poll.h>
 #include <sys/inotify.h>
 
-#include "sd-network.h"
+#include "sd-network.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "env-file.h"

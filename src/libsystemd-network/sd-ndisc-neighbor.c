@@ -2,12 +2,12 @@
 
 #include <netinet/icmp6.h>
 
-#include "sd-ndisc.h"
+#include "sd-ndisc-neighbor.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "in-addr-util.h"
 #include "ndisc-internal.h"
-#include "ndisc-neighbor-internal.h"
+#include "ndisc-neighbor-internal.h" // IWYU pragma: associated
 #include "ndisc-option.h"
 
 static sd_ndisc_neighbor* ndisc_neighbor_free(sd_ndisc_neighbor *na) {

@@ -10,7 +10,7 @@
 #include <sys/vfs.h>
 #include <unistd.h>
 
-#include "sd-journal.h"
+#include "sd-journal.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "catalog.h"
@@ -27,9 +27,9 @@
 #include "id128-util.h"
 #include "inotify-util.h"
 #include "io-util.h"
-#include "journal-def.h"
+#include "journal-def.h" // IWYU pragma: associated
 #include "journal-file.h"
-#include "journal-internal.h"
+#include "journal-internal.h" // IWYU pragma: associated
 #include "list.h"
 #include "lookup3.h"
 #include "nulstr-util.h"

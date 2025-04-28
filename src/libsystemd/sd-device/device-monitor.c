@@ -13,7 +13,7 @@
 #include "MurmurHash2.h"
 #include "alloc-util.h"
 #include "device-filter.h"
-#include "device-monitor-private.h"
+#include "device-monitor-private.h" // IWYU pragma: associated
 #include "device-private.h"
 #include "device-util.h"
 #include "errno-util.h"

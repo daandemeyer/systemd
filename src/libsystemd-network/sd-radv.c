@@ -8,7 +8,7 @@
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
 
-#include "sd-radv.h"
+#include "sd-radv.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "dns-domain.h"
@@ -22,7 +22,7 @@
 #include "memory-util.h"
 #include "ndisc-router-solicit-internal.h"
 #include "network-common.h"
-#include "radv-internal.h"
+#include "radv-internal.h" // IWYU pragma: associated
 #include "random-util.h"
 #include "socket-util.h"
 #include "string-util.h"

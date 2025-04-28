@@ -5,13 +5,13 @@
 
 #include <netinet/icmp6.h>
 
-#include "sd-ndisc.h"
+#include "sd-ndisc-router.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "dns-domain.h"
 #include "dns-resolver-internal.h"
 #include "ndisc-internal.h"
-#include "ndisc-router-internal.h"
+#include "ndisc-router-internal.h" // IWYU pragma: associated
 #include "string-table.h"
 #include "unaligned.h"
 

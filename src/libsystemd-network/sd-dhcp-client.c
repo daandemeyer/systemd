@@ -11,12 +11,12 @@
 #include <stdlib.h>
 #include <sys/ioctl.h>
 
-#include "sd-dhcp-client.h"
+#include "sd-dhcp-client.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "device-util.h"
 #include "dhcp-client-id-internal.h"
-#include "dhcp-client-internal.h"
+#include "dhcp-client-internal.h" // IWYU pragma: associated
 #include "dhcp-lease-internal.h"
 #include "dhcp-network.h"
 #include "dhcp-option.h"

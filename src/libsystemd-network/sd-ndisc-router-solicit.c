@@ -2,12 +2,12 @@
 
 #include <netinet/icmp6.h>
 
-#include "sd-radv.h"
+#include "sd-ndisc-router-solicit.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "in-addr-util.h"
 #include "ndisc-option.h"
-#include "ndisc-router-solicit-internal.h"
+#include "ndisc-router-solicit-internal.h" // IWYU pragma: associated
 #include "radv-internal.h"
 
 static sd_ndisc_router_solicit* ndisc_router_solicit_free(sd_ndisc_router_solicit *rs) {

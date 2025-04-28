@@ -2,7 +2,7 @@
 
 #include "alloc-util.h"
 #include "hashmap.h"
-#include "libudev-list-internal.h"
+#include "libudev-list-internal.h" // IWYU pragma: associated
 #include "list.h"
 
 /**

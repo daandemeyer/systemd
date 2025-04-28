@@ -5,11 +5,11 @@
 #include <sys/ioctl.h>
 #include <sys/types.h>
 
-#include "sd-device.h"
+#include "sd-device.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "chase.h"
-#include "device-internal.h"
+#include "device-internal.h" // IWYU pragma: associated
 #include "device-private.h"
 #include "device-util.h"
 #include "devnum-util.h"

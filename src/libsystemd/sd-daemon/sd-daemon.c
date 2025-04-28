@@ -13,7 +13,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#include "sd-daemon.h"
+#include "sd-daemon.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "extract-word.h"

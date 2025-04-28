@@ -6,7 +6,7 @@
 #include <netinet/icmp6.h>
 #include <netinet/in.h>
 
-#include "sd-ndisc.h"
+#include "sd-ndisc.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "ether-addr-util.h"
@@ -15,7 +15,7 @@
 #include "icmp6-util.h"
 #include "in-addr-util.h"
 #include "memory-util.h"
-#include "ndisc-internal.h"
+#include "ndisc-internal.h" // IWYU pragma: associated
 #include "ndisc-neighbor-internal.h"
 #include "ndisc-redirect-internal.h"
 #include "ndisc-router-internal.h"

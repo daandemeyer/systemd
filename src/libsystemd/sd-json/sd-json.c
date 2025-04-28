@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 
-#include "sd-json.h"
+#include "sd-json.h" // IWYU pragma: associated
 #include "sd-messages.h"
 
 #include "alloc-util.h"
@@ -22,7 +22,7 @@
 #include "hexdecoct.h"
 #include "in-addr-util.h"
 #include "iovec-util.h"
-#include "json-internal.h"
+#include "json-internal.h" // IWYU pragma: associated
 #include "json-util.h"
 #include "log.h"
 #include "macro.h"

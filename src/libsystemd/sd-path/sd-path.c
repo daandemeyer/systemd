@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 
-#include "sd-path.h"
+#include "sd-path.h" // IWYU pragma: associated
 
 #include "alloc-util.h"
 #include "architecture.h"
