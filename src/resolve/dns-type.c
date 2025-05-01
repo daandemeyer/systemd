@@ -15,8 +15,8 @@ typedef const struct {
 static const struct dns_type_name *
 lookup_dns_type (register const char *str, register GPERF_LEN_TYPE len);
 
-#include "dns_type-from-name.h"
-#include "dns_type-to-name.h"
+#include "dns_type-from-name.h" // IWYU pragma: keep
+#include "dns_type-to-name.h" // IWYU pragma: keep
 
 int dns_type_from_string(const char *s) {
         const struct dns_type_name *sc;

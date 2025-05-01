@@ -10,8 +10,8 @@
 
 static const struct af_name* lookup_af(register const char *str, register GPERF_LEN_TYPE len);
 
-#include "af-from-name.h"
-#include "af-to-name.h"
+#include "af-from-name.h" // IWYU pragma: keep
+#include "af-to-name.h" // IWYU pragma: keep
 
 const char* af_to_name(int id) {
 
