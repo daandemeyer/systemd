@@ -9,6 +9,7 @@
 #include "alloc-util.h"
 #include "fd-util.h"
 #include "fileio.h"
+#include "hashmap.h"
 #include "log.h"
 #include "macro.h"
 #include "parse-util.h"

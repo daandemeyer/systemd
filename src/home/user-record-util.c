@@ -7,6 +7,7 @@
 #include "alloc-util.h"
 #include "errno-util.h"
 #include "fd-util.h"
+#include "hashmap.h"
 #include "home-util.h"
 #include "id128-util.h"
 #include "json-util.h"

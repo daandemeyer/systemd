@@ -2,6 +2,9 @@
 
 #include <errno.h>
 
+#include "sd-event.h"
+
+#include "alloc-util.h"
 #include "errno-util.h"
 #include "event-source.h"
 #include "event-util.h"
