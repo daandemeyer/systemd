@@ -19,6 +19,16 @@
 int saved_argc = 0;
 char **saved_argv = NULL;
 
+void save_argc_argv(int argc, char **argv) {
+        /* Protect against CVE-2021-4034 style attacks */
+        assert_se(argc > 0);
+        assert_se(argv);
+        assert_se(argv[0]);
+
+        saved_argc = argc;
+        saved_argv = argv;
+}
+
 bool invoked_as(char *argv[], const char *token) {
         if (!argv || isempty(argv[0]))
                 return false;
