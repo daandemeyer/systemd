@@ -1192,6 +1192,7 @@ TEST(ASSERT) {
 
         ASSERT_EQ(0, 0);
         ASSERT_EQ(-1, -1);
+        ASSERT_EQ(UINT64_MAX, UINT64_MAX);
         ASSERT_SIGNAL(ASSERT_EQ(255, -1), SIGABRT);
 
         ASSERT_GE(0, 0);
