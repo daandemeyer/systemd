@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+name: update-snapshot
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    # Update snapshots daily at midnight
+    - cron: "0 0 */3 * *"
+
+jobs:
+  update-snapshot:
+    runs-on: ubuntu-24.04
+    if: github.repository == 'systemd/systemd' || github.repository == 'systemd/systemd-stable'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - distro: arch
+          release: rolling
+        - distro: centos
+          release: 9
+        - distro: centos
+          release: 10
+        - distro: fedora
+          release: 42
+        - distro: fedora
+          release: rawhide
+        - distro: debian
+          release: testing
+        - distro: ubuntu
+          release: noble
+        - distro: opensuse
+          release: tumbleweed
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: systemd/mkosi@0d1143150835b21c1bfe64428df5f45b558280b1
+
+      - name: Latest snapshot
+        run: tools/update-snapshot.py -d ${{ matrix.distro }} -r ${{ matrix.release }}
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@271a8d0340265f705b14b6d32b9829c1cb33d45e
