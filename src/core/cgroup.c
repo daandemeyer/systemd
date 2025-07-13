@@ -2096,6 +2096,8 @@ static int unit_update_cgroup(
                 return log_unit_error_errno(u, r, "Failed to get cgroup path: %m");
         set_path = r == 0;
 
+        log_unit_debug(u, "Realizing cgroup %s", cgroup);
+
         /* First, create our own group */
         r = cg_create(cgroup);
         if (r < 0)
@@ -2696,6 +2698,7 @@ void unit_release_cgroup(Unit *u, bool drop_cgroup_runtime) {
                 return;
 
         if (crt->cgroup_path) {
+                log_unit_debug(u, "Forgetting details about cgroup %s", crt->cgroup_path);
                 (void) hashmap_remove(u->manager->cgroup_unit, crt->cgroup_path);
                 crt->cgroup_path = mfree(crt->cgroup_path);
         }
@@ -3952,6 +3955,10 @@ bool unit_invalidate_cgroup(Unit *u, CGroupMask m) {
 
         if (FLAGS_SET(crt->cgroup_invalidated_mask, m)) /* NOP? */
                 return false;
+
+        _cleanup_free_ char *cgroup = NULL;
+        if (DEBUG_LOGGING && unit_get_cgroup_path_with_fallback(u, &cgroup) >= 0)
+                log_unit_debug(u, "Invalidating cgroup %s", cgroup);
 
         crt->cgroup_invalidated_mask |= m;
         unit_add_to_cgroup_realize_queue(u);
