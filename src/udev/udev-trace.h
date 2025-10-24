@@ -1,9 +1,7 @@
 /* SPDX-License-Identifier: LGPL-2.1-or-later */
 #pragma once
 
-#if HAVE_SYS_SDT_H
-#define SDT_USE_VARIADIC
-#include <sys/sdt.h>
+#include <usdt.h>
 
 #include "device-private.h"
 #include "device-util.h"
@@ -20,7 +18,7 @@
  *   - arg3 - subsystem
  */
 #define DEVICE_TRACE_POINT(name, dev, ...)                                                                 \
-        do {                                                                                               \
+        if (USDT_IS_ACTIVE(udev, name)) {                                                                  \
                 PROTECT_ERRNO;                                                                             \
                 const char *_n = NULL, *_p = NULL, *_s = NULL;                                             \
                 sd_device *_d = (dev);                                                                     \
@@ -29,8 +27,5 @@
                 (void) sd_device_get_sysname(_d, &_n);                                                     \
                 (void) sd_device_get_syspath(_d, &_p);                                                     \
                 (void) sd_device_get_subsystem(_d, &_s);                                                   \
-                STAP_PROBEV(udev, name, device_action_to_string(_a), _n, _p, _s __VA_OPT__(,) __VA_ARGS__);\
-        } while (false);
-#else
-#define DEVICE_TRACE_POINT(name, dev, ...) ((void) 0)
-#endif
+                USDT_WITH_SEMA(udev, name, device_action_to_string(_a), _n, _p, _s __VA_OPT__(,) __VA_ARGS__);\
+        }

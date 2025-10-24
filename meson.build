@@ -700,7 +700,6 @@ foreach header : [
 endforeach
 
 foreach header : [
-        'sys/sdt.h',
         'threads.h',
         'valgrind/memcheck.h',
         'valgrind/valgrind.h',
@@ -2070,6 +2069,7 @@ system_include_args = [
         '-isystem', meson.project_source_root() / 'src/include/override',
         '-isystem', meson.project_build_root()  / 'src/include/uapi',
         '-isystem', meson.project_source_root() / 'src/include/uapi',
+        '-isystem', meson.project_source_root() / 'src/include/usdt',
 ]
 
 system_includes = [
@@ -2080,6 +2080,7 @@ system_includes = [
                 # priority must be listed earlier.
                 'src/include/uapi',
                 'src/include/override',
+                'src/include/usdt',
                 is_system : true,
         ),
 ]
