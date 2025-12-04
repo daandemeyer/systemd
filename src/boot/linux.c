@@ -160,7 +160,7 @@ EFI_STATUS linux_exec(
                 const struct iovec *initrd) {
 
         size_t kernel_size_in_memory = 0;
-        uint32_t compat_entry_point, entry_point;
+        uint32_t compat_entry_point, entry_point, alignment;
         uint64_t image_base;
         EFI_STATUS err;
 
@@ -168,7 +168,13 @@ EFI_STATUS linux_exec(
         assert(iovec_is_set(kernel));
         assert(iovec_is_valid(initrd));
 
-        err = pe_kernel_info(kernel->iov_base, &entry_point, &compat_entry_point, &image_base, &kernel_size_in_memory);
+        err = pe_kernel_info(
+                        kernel->iov_base,
+                        &entry_point,
+                        &compat_entry_point,
+                        &image_base,
+                        &kernel_size_in_memory,
+                        &alignment);
 #if defined(__i386__) || defined(__x86_64__)
         if (err == EFI_UNSUPPORTED)
                 /* Kernel is too old to support LINUX_INITRD_MEDIA_GUID, try the deprecated EFI handover
@@ -267,9 +273,12 @@ EFI_STATUS linux_exec(
 
         /* Do we need to ensure under 4gb address on x86? */
         _cleanup_pages_ Pages loaded_kernel_pages = xmalloc_pages(
-                        AllocateAnyPages, EfiLoaderCode, EFI_SIZE_TO_PAGES(kernel_size_in_memory), 0);
+                        AllocateAnyPages,
+                        EfiLoaderCode,
+                        EFI_SIZE_TO_PAGES(ROUND_UP(kernel_size_in_memory, alignment)),
+                        0);
 
-        uint8_t* loaded_kernel = PHYSICAL_ADDRESS_TO_POINTER(loaded_kernel_pages.addr);
+        uint8_t* loaded_kernel = PHYSICAL_ADDRESS_TO_POINTER(ROUND_UP(loaded_kernel_pages.addr, alignment));
         FOREACH_ARRAY(h, headers, n_headers) {
                 if (h->PointerToRelocations != 0)
                         return log_error_status(EFI_LOAD_ERROR, "Inner kernel image contains sections with relocations, which we do not support.");

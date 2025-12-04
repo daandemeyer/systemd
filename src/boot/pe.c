@@ -459,7 +459,14 @@ static uint32_t get_compatibility_entry_address(const DosFileHeader *dos, const 
         return 0;
 }
 
-EFI_STATUS pe_kernel_info(const void *base, uint32_t *ret_entry_point, uint32_t *ret_compat_entry_point, uint64_t *ret_image_base, size_t *ret_size_in_memory) {
+EFI_STATUS pe_kernel_info(
+                const void *base,
+                uint32_t *ret_entry_point,
+                uint32_t *ret_compat_entry_point,
+                uint64_t *ret_image_base,
+                size_t *ret_size_in_memory,
+                uint32_t *ret_alignment) {
+
         assert(base);
 
         const DosFileHeader *dos = (const DosFileHeader *) base;
@@ -499,6 +506,8 @@ EFI_STATUS pe_kernel_info(const void *base, uint32_t *ret_entry_point, uint32_t 
                         *ret_image_base = image_base;
                 if (ret_size_in_memory)
                         *ret_size_in_memory = size_in_memory;
+                if (ret_alignment)
+                        *ret_alignment = pe->OptionalHeader.SectionAlignment;
                 return EFI_SUCCESS;
         }
 
@@ -515,6 +524,8 @@ EFI_STATUS pe_kernel_info(const void *base, uint32_t *ret_entry_point, uint32_t 
                 *ret_image_base = image_base;
         if (ret_size_in_memory)
                 *ret_size_in_memory = size_in_memory;
+        if (ret_alignment)
+                *ret_alignment = pe->OptionalHeader.SectionAlignment;
 
         return EFI_SUCCESS;
 }
