@@ -575,6 +575,7 @@ static int extract_image_and_extensions(
                 PortableMetadata **ret_os_release,
                 Hashmap **ret_unit_files,
                 char ***ret_valid_prefixes,
+                char ***ret_valid_binaries,
                 sd_bus_error *error) {
 
         _cleanup_free_ char *id = NULL, *id_like = NULL, *version_id = NULL, *sysext_level = NULL, *confext_level = NULL;
@@ -582,7 +583,7 @@ static int extract_image_and_extensions(
         _cleanup_ordered_hashmap_free_ OrderedHashmap *extension_images = NULL, *extension_releases = NULL;
         _cleanup_(pick_result_done) PickResult result = PICK_RESULT_NULL;
         _cleanup_hashmap_free_ Hashmap *unit_files = NULL;
-        _cleanup_strv_free_ char **valid_prefixes = NULL;
+        _cleanup_strv_free_ char **valid_prefixes = NULL, **valid_binaries = NULL;
         _cleanup_(image_unrefp) Image *image = NULL;
         Image *ext;
         int r;
@@ -674,8 +675,8 @@ static int extract_image_and_extensions(
         /* If we are layering extension images on top of a runtime image, check that the os-release and
          * extension-release metadata match, otherwise reject it immediately as invalid, or it will fail when
          * the units are started. Also, collect valid portable prefixes if caller requested that. */
-        if (validate_extension || ret_valid_prefixes) {
-                _cleanup_free_ char *prefixes = NULL;
+        if (validate_extension || ret_valid_prefixes || ret_valid_binaries) {
+                _cleanup_free_ char *prefixes = NULL, *binaries = NULL;
 
                 r = parse_env_file_fd(os_release->fd, os_release->name,
                                      "ID", &id,
@@ -683,7 +684,8 @@ static int extract_image_and_extensions(
                                      "VERSION_ID", &version_id,
                                      "SYSEXT_LEVEL", &sysext_level,
                                      "CONFEXT_LEVEL", &confext_level,
-                                     "PORTABLE_PREFIXES", &prefixes);
+                                     "PORTABLE_PREFIXES", &prefixes,
+                                     "PORTABLE_BINARIES", &binaries);
                 if (r < 0)
                         return r;
                 if (isempty(id))
@@ -693,6 +695,30 @@ static int extract_image_and_extensions(
                         valid_prefixes = strv_split(prefixes, WHITESPACE);
                         if (!valid_prefixes)
                                 return -ENOMEM;
+
+                        STRV_FOREACH(prefix, valid_prefixes)
+                                if (!unit_prefix_is_valid(*prefix))
+                                        return sd_bus_error_setf(
+                                                        error,
+                                                        EINVAL,
+                                                        "Invalid portable prefix '%s' specified in image %s os-release metadata.",
+                                                        *prefix,
+                                                        name_or_path);
+                }
+
+                if (binaries) {
+                        valid_binaries = strv_split(binaries, WHITESPACE);
+                        if (!valid_binaries)
+                                return -ENOMEM;
+
+                        STRV_FOREACH(binary, valid_binaries)
+                                if (!filename_is_valid(*binary))
+                                        return sd_bus_error_setf(
+                                                        error,
+                                                        EINVAL,
+                                                        "Invalid portable binary '%s' specified in image %s os-release metadata.",
+                                                        *binary,
+                                                        name_or_path);
                 }
         }
 
@@ -719,7 +745,7 @@ static int extract_image_and_extensions(
                 if (r < 0)
                         return r;
 
-                if (!validate_extension && !ret_valid_prefixes && !ret_extension_releases)
+                if (!validate_extension && !ret_valid_prefixes && !ret_valid_binaries && !ret_extension_releases)
                         continue;
 
                 r = load_env_file_pairs_fd(extension_release_meta->fd, extension_release_meta->name, &extension_release);
@@ -744,6 +770,13 @@ static int extract_image_and_extensions(
                                 return r;
                 }
 
+                e = strv_env_pairs_get(extension_release, "PORTABLE_BINARIES");
+                if (e) {
+                        r = strv_split_and_extend(&valid_binaries, e, WHITESPACE, /* filter_duplicates= */ true);
+                        if (r < 0)
+                                return r;
+                }
+
                 if (ret_extension_releases) {
                         r = ordered_hashmap_put(extension_releases, ext->name, extension_release_meta);
                         if (r < 0)
@@ -753,6 +786,7 @@ static int extract_image_and_extensions(
         }
 
         strv_sort(valid_prefixes);
+        strv_sort(valid_binaries);
 
         if (ret_image)
                 *ret_image = TAKE_PTR(image);
@@ -766,6 +800,8 @@ static int extract_image_and_extensions(
                 *ret_unit_files = TAKE_PTR(unit_files);
         if (ret_valid_prefixes)
                 *ret_valid_prefixes = TAKE_PTR(valid_prefixes);
+        if (ret_valid_binaries)
+                *ret_valid_binaries = TAKE_PTR(valid_binaries);
 
         return 0;
 }
@@ -780,13 +816,11 @@ int portable_extract(
                 PortableMetadata **ret_os_release,
                 OrderedHashmap **ret_extension_releases,
                 Hashmap **ret_unit_files,
-                char ***ret_valid_prefixes,
                 sd_bus_error *error) {
 
         _cleanup_(portable_metadata_unrefp) PortableMetadata *os_release = NULL;
         _cleanup_ordered_hashmap_free_ OrderedHashmap *extension_images = NULL, *extension_releases = NULL;
         _cleanup_hashmap_free_ Hashmap *unit_files = NULL;
-        _cleanup_strv_free_ char **valid_prefixes = NULL;
         _cleanup_(image_unrefp) Image *image = NULL;
         int r;
 
@@ -805,7 +839,8 @@ int portable_extract(
                         &extension_releases,
                         &os_release,
                         &unit_files,
-                        ret_valid_prefixes ? &valid_prefixes : NULL,
+                        /* ret_valid_prefixes= */ NULL,
+                        /* ret_valid_binaries= */ NULL,
                         error);
         if (r < 0)
                 return r;
@@ -829,8 +864,6 @@ int portable_extract(
                 *ret_extension_releases = TAKE_PTR(extension_releases);
         if (ret_unit_files)
                 *ret_unit_files = TAKE_PTR(unit_files);
-        if (ret_valid_prefixes)
-                *ret_valid_prefixes = TAKE_PTR(valid_prefixes);
 
         return 0;
 }
@@ -1295,7 +1328,7 @@ static int install_profile_dropin(
         return 0;
 }
 
-static const char *attached_path(const LookupPaths *paths, PortableFlags flags) {
+static const char *attached_unit_path(const LookupPaths *paths, PortableFlags flags) {
         const char *where;
 
         assert(paths);
@@ -1333,7 +1366,7 @@ static int attach_unit_file(
         assert(m);
         assert(PORTABLE_METADATA_IS_UNIT(m));
 
-        where = attached_path(paths, flags);
+        where = attached_unit_path(paths, flags);
 
         (void) mkdir_parents(where, 0755);
         if (mkdir(where, 0755) < 0) {
@@ -1414,6 +1447,65 @@ static int attach_unit_file(
         chroot_dropin = mfree(chroot_dropin);
         profile_dropin = mfree(profile_dropin);
         dropin_dir = mfree(dropin_dir);
+
+        return 0;
+}
+
+static int attached_binary_path(PortableFlags flags, char **ret) {
+        _cleanup_free_ char *where = NULL;
+        int r;
+
+        assert(ret);
+
+        if (flags & PORTABLE_RUNTIME)
+                r = runtime_directory_generic(RUNTIME_SCOPE_SYSTEM, "systemd/bin.attached", &where);
+        else
+                r = state_directory_generic(RUNTIME_SCOPE_SYSTEM, "systemd/bin.attached", &where);
+        if (r < 0)
+                return log_debug_errno(r, "Failed to determine attached binary path: %m");
+
+        *ret = TAKE_PTR(where);
+        return 0;
+}
+
+static int attach_binary(
+                const char *image_path,
+                const char *binary,
+                PortableFlags flags,
+                PortableChange **changes,
+                size_t *n_changes) {
+
+        _cleanup_free_ char *where = NULL, *path = NULL;
+        int r;
+
+        assert(image_path);
+        assert(binary);
+
+        r = attached_binary_path(flags, &where);
+        if (r < 0)
+                return r;
+
+        (void) mkdir_parents(where, 0755);
+        if (mkdir(where, 0755) < 0) {
+                if (errno != EEXIST)
+                        return log_debug_errno(errno, "Failed to create binary attach directory %s: %m", where);
+        } else
+                (void) portable_changes_add(changes, n_changes, PORTABLE_MKDIR, where, NULL);
+
+        path = path_join()
+
+        path = path_join(where, binary);
+        if (!path)
+                return -ENOMEM;
+
+        if (flags & PORTABLE_FORCE_ATTACH)
+                r = symlink_atomic(LIBEXECDIR "/systemd-exec-portable-binary", path);
+        else
+                r = RET_NERRNO(symlink(LIBEXECDIR "/systemd-exec-portable-binary", path));
+        if (r < 0)
+                return log_debug_errno(r, "Failed to symlink binary file '%s': %m", path);
+
+        (void) portable_changes_add(changes, n_changes, PORTABLE_SYMLINK, path, LIBEXECDIR "/systemd-exec-portable-binary");
 
         return 0;
 }
@@ -1633,7 +1725,7 @@ int portable_attach(
         _cleanup_(portable_metadata_unrefp) PortableMetadata *os_release = NULL;
         _cleanup_hashmap_free_ Hashmap *unit_files = NULL;
         _cleanup_(lookup_paths_done) LookupPaths paths = {};
-        _cleanup_strv_free_ char **valid_prefixes = NULL;
+        _cleanup_strv_free_ char **valid_prefixes = NULL, **valid_binaries = NULL;
         _cleanup_(image_unrefp) Image *image = NULL;
         PortableMetadata *item;
         int r;
@@ -1654,6 +1746,7 @@ int portable_attach(
                         &os_release,
                         &unit_files,
                         &valid_prefixes,
+                        &valid_binaries,
                         error);
         if (r < 0)
                 return r;
@@ -1722,6 +1815,12 @@ int portable_attach(
                                      item, os_release, profile, flags, changes, n_changes);
                 if (r < 0)
                         return sd_bus_error_set_errnof(error, r, "Failed to attach unit '%s': %m", item->name);
+        }
+
+        STRV_FOREACH(binary, valid_binaries) {
+                r = attach_binary(image->path, *binary, flags, changes, n_changes);
+                if (r < 0)
+                        return sd_bus_error_set_errnof(error, r, "Failed to attach binary '%s': %m", *binary);
         }
 
         /* We don't care too much for the image symlink/copy, it's just a convenience thing, it's not necessary for
@@ -1893,7 +1992,7 @@ int portable_detach(
         if (r < 0)
                 return r;
 
-        where = attached_path(&paths, flags);
+        where = attached_unit_path(&paths, flags);
 
         d = opendir(where);
         if (!d) {
@@ -2081,7 +2180,7 @@ static int portable_get_state_internal(
         if (r < 0)
                 return r;
 
-        where = attached_path(&paths, flags);
+        where = attached_unit_path(&paths, flags);
 
         d = opendir(where);
         if (!d) {

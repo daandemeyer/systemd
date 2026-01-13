@@ -75,7 +75,6 @@ int portable_extract(
                 PortableMetadata **ret_os_release,
                 OrderedHashmap **ret_extension_releases,
                 Hashmap **ret_unit_files,
-                char ***ret_valid_prefixes,
                 sd_bus_error *error);
 
 int portable_attach(

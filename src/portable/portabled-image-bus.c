@@ -168,7 +168,6 @@ int bus_image_common_get_metadata(
                         &os_release,
                         &extension_releases,
                         &unit_files,
-                        NULL,
                         error);
         if (r < 0)
                 return r;

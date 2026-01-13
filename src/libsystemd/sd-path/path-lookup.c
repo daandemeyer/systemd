@@ -85,6 +85,58 @@ int runtime_directory(RuntimeScope scope, const char *fallback_suffix, char **re
         return 1;
 }
 
+int state_directory_generic(RuntimeScope scope, const char *suffix, char **ret) {
+        int r;
+
+        assert(ret);
+
+        /* This does not bother with $STATE_DIRECTORY, and hence can be applied to get other service's
+         * state dir. */
+
+        switch (scope) {
+        case RUNTIME_SCOPE_USER:
+                r = xdg_user_data_dir(suffix, ret);
+                if (r < 0)
+                        return r;
+                break;
+
+        case RUNTIME_SCOPE_SYSTEM: {
+                char *d = path_join("/var", suffix);
+                if (!d)
+                        return -ENOMEM;
+                *ret = d;
+                break;
+        }
+
+        default:
+                return -EINVAL;
+        }
+
+        return 0;
+}
+
+int state_directory(RuntimeScope scope, const char *suffix, char **ret) {
+        int r;
+
+        assert(ret);
+
+        /* Accept $STATE_DIRECTORY as authoritative, i.e. only works for our service's own state dir.
+         *
+         * If it's missing, apply the suffix to /var/, or $XDG_DATA_HOME if we are in a user runtime scope.
+         *
+         * Return value indicates whether the suffix was applied or not. */
+
+        const char *e = secure_getenv("STATE_DIRECTORY");
+        if (e)
+                return strdup_to(ret, e);
+
+        r = state_directory_generic(scope, suffix, ret);
+        if (r < 0)
+                return r;
+
+        return 1;
+}
+
 static const char* const user_data_unit_paths[] = {
         "/usr/local/lib/systemd/user",
         "/usr/local/share/systemd/user",
