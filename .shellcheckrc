@@ -1,0 +1,14 @@
+# Tips depend on target shell and yours is unknown. Add a shebang or a 'shell' directive.
+# We have many shell script snippets in man/ that intentionally don't have shebangs.
+disable=SC2148
+
+# ShellCheck can't follow non-constant source.
+# Not following: <path> was not specified as input (see shellcheck -x).
+# We source a lot of files dynamically (e.g. /etc/os-release, util.sh via test-control.sh, etc.)
+disable=SC1090
+disable=SC1091
+
+# This function is never invoked. Check usage (or ignored if invoked indirectly).
+# Many of our test functions are invoked indirectly via test-control.sh's run_testcases().
+# Similarly, cleanup()/at_exit()/teardown() functions are registered via trap.
+disable=SC2329

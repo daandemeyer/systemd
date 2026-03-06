@@ -55,6 +55,9 @@ jobs:
 
           mkosi -f box -- true
 
+      - name: Run ShellCheck
+        run: git ls-files '*.sh' ':!:*.sh.in' | xargs mkosi box -- shellcheck
+
       - name: Run mypy
         run: |
           mkosi box -- mypy --version
