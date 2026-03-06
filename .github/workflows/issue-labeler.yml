@@ -1,12 +1,8 @@
 ---
-
 name: Issue labeler
 on:
   issues:
-    types: [ opened ]
-
-permissions:
-  contents: read
+    types: [opened]
 
 jobs:
   label-component:
@@ -15,24 +11,135 @@ jobs:
     permissions:
       issues: write
 
-    strategy:
-      matrix:
-        template: [ bug_report.yml, feature_request.yml ]
-
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
-          persist-credentials: false
+          script: |
+            const componentToLabels = {
+              'systemd-analyze':                 ['analyze'],
+              'systemd-ask-password':            ['ask-password'],
+              'systemd-binfmt':                  ['binfmt'],
+              'systemd-cgtop':                   ['cgtop'],
+              'coredumpctl':                     ['coredump'],
+              'systemd-coredump':                ['coredump'],
+              'systemd-cryptsetup':              ['cryptsetup'],
+              'systemd-delta':                   ['delta'],
+              'systemd-dissect':                 ['dissect'],
+              'systemd-env-generator':           ['env-generator'],
+              'systemd-fsck':                    ['fsck'],
+              'systemd-gpt-auto-generator':      ['gpt-auto'],
+              'systemd-growfs':                  ['growfs'],
+              'systemd-homed':                   ['homed'],
+              'homectl':                         ['homed'],
+              'pam_systemd_home':                ['homed'],
+              'systemd-hostnamed':               ['hostname'],
+              'hostnamectl':                     ['hostname'],
+              'systemd-hwdb':                    ['hwdb'],
+              'hardware database files':         ['hwdb'],
+              'systemd-import':                  ['import'],
+              'systemd-journald':                ['journal'],
+              'journalctl':                      ['journal'],
+              'systemd-journal-remote':          ['journal-remote'],
+              'systemd-journal-upload':          ['journal-remote'],
+              'systemd-journal-gatewayd':        ['journal-remote'],
+              'kernel-install':                  ['kernel-install'],
+              'systemd-logind':                  ['login'],
+              'loginctl':                        ['login'],
+              'pam_systemd':                     ['login'],
+              'systemd-machined':                ['machine'],
+              'machinectl':                      ['machine'],
+              'systemd-modules-load':            ['modules-load'],
+              'systemd-networkd':                ['network'],
+              'networkctl':                      ['network'],
+              'systemd-networkd-wait-online':    ['network'],
+              'systemd-network-generator':       ['network'],
+              'systemd-nspawn':                  ['nspawn'],
+              'systemd-oomd':                    ['oomd'],
+              'oomctl':                          ['oomd'],
+              'systemd':                         ['pid1'],
+              'systemd-portabled':               ['portabled'],
+              'portablectl':                     ['portabled'],
+              'systemd-pstore':                  ['pstore'],
+              'systemd-repart':                  ['repart'],
+              'systemd-resolved':                ['resolve'],
+              'resolvectl':                      ['resolve'],
+              'nss-resolve':                     ['resolve'],
+              'systemd-rfkill':                  ['rfkill'],
+              'rpm scriptlets':                  ['rpm'],
+              'systemd-run':                     ['run'],
+              'bootctl':                         ['sd-boot/sd-stub/bootctl'],
+              'systemd-boot':                    ['sd-boot/sd-stub/bootctl'],
+              'systemd-stub':                    ['sd-boot/sd-stub/bootctl'],
+              'systemd-sysctl':                  ['sysctl'],
+              'systemd-sysext':                  ['sysext'],
+              'systemctl':                       ['systemctl'],
+              'systemd-sysusers':                ['sysusers'],
+              'tests':                           ['tests'],
+              'systemd-timedate':                ['timedate'],
+              'timedatectl':                     ['timedate'],
+              'systemd-timesync':                ['timesync'],
+              'systemd-tmpfiles':                ['tmpfiles'],
+              'systemd-udevd':                   ['udev'],
+              'udevadm':                         ['udev'],
+              'udev rule files':                 ['udev'],
+              'systemd-userdb':                  ['userdb'],
+              'userdbctl':                       ['userdb'],
+              'systemd-veritysetup':             ['veritysetup'],
+              'systemd-vmspawn':                 ['vmspawn'],
+              'systemd-xdg-autostart-generator': ['xdg-autostart'],
+            };
 
-      - name: Parse issue form
-        uses: stefanbuck/github-issue-parser@1e5bdee70d4b3e066a33aa0669ab782943825f94
-        id: issue-parser
-        with:
-          template-path: .github/ISSUE_TEMPLATE/${{ matrix.template }}
+            const body = context.payload.issue?.body;
+            if (!body) {
+              core.info('Issue body is empty, skipping');
+              return;
+            }
 
-      - name: Set labels based on component field
-        uses: redhat-plumbers-in-action/advanced-issue-labeler@b80ae64e3e156e9c111b075bfa04b295d54e8e2e
-        with:
-          issue-form: ${{ steps.issue-parser.outputs.jsonString }}
-          template: ${{ matrix.template }}
-          token: ${{ secrets.GITHUB_TOKEN }}
+            // Extract the Component section from the issue form. The rendered markdown looks like:
+            //
+            //   ### Component
+            //
+            //   systemd-journald, journalctl
+            //
+            //   ### Next Section
+            //
+            const componentMatch = body.match(/###\s*Component\s*\n\n(.*?)(?:\n\n###|\n*$)/s);
+            if (!componentMatch) {
+              core.info('No Component section found in issue body, skipping');
+              return;
+            }
+
+            const raw = componentMatch[1].trim();
+            if (!raw || raw === '_No response_' || raw === 'None') {
+              core.info('Component section is empty, skipping');
+              return;
+            }
+
+            const selected = raw.split(',').map(s => s.trim()).filter(Boolean);
+            core.info(`Selected components: ${JSON.stringify(selected)}`);
+
+            const labels = new Set();
+            for (const component of selected) {
+              const mapped = componentToLabels[component];
+              if (mapped) {
+                for (const label of mapped) {
+                  labels.add(label);
+                }
+              } else if (component !== 'other') {
+                core.warning(`Unknown component: ${component}`);
+              }
+            }
+
+            if (labels.size === 0) {
+              core.info('No labels to add');
+              return;
+            }
+
+            core.info(`Adding labels: ${JSON.stringify([...labels])}`);
+
+            await github.rest.issues.addLabels({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              labels: [...labels],
+            });
