@@ -60,3 +60,38 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Build check
         run: .github/workflows/build-test.sh
+
+  musl:
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: ${{ github.workflow }}-musl-${{ github.ref }}
+      cancel-in-progress: true
+
+    steps:
+      - name: Repository checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          persist-credentials: false
+
+      - uses: systemd/mkosi@66d51024b7149f40be4702e84275c936373ace97
+
+      - name: Build tools tree
+        run: |
+          tee mkosi/mkosi.local.conf <<EOF
+          [Build]
+          ToolsTreeDistribution=fedora
+          ToolsTreeRelease=rawhide
+          EOF
+
+          mkosi -f box -- true
+
+      - name: Build with musl
+        run: |
+          mkosi box -- \
+            env \
+            CC=musl-gcc \
+            CXX=musl-gcc \
+            CFLAGS="-idirafter /usr/include" \
+            CXXFLAGS="-idirafter /usr/include" \
+              meson setup -Dlibc=musl -Ddbus-interfaces-dir=no musl
+          mkosi box -- ninja -C musl
