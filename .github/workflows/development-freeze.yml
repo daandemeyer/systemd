@@ -1,44 +1,135 @@
-# doc: https://github.com/redhat-plumbers-in-action/devel-freezer#readme
+# vi: ts=2 sw=2 et:
+# SPDX-License-Identifier: LGPL-2.1-or-later
 ---
 
 name: Development Freeze
 on:
-  workflow_run:
-    workflows: [ Gather Pull Request Metadata ]
-    types:
-      - completed
-
-permissions:
-  contents: read
+  pull_request_target:
+    branches: [main]
+    types: [opened, reopened, synchronize]
 
 jobs:
   freezer:
-    if: >
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'success' &&
-      github.repository == 'systemd/systemd'
+    if: github.repository == 'systemd/systemd'
     runs-on: ubuntu-24.04
-
     permissions:
       pull-requests: write
 
     steps:
-      - id: artifact
-        name: Download Pull Request Metadata artifact
-        uses: redhat-plumbers-in-action/download-artifact@103e5f882470b59e9d71c80ecb2d0a0b91a7c43b
+      - name: Development Freeze Check
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
         with:
-          name: Pull Request Metadata
+          script: |
+            const MARKER = '<!-- devel-freezer -->';
+            const FREEZE_TAG_PATTERN = /^\S*-rc\d+$/;
+            const ALLOWED_LABELS = new Set(['needs-stable-backport', 'dependencies', 'l10n 🌍']);
 
-      - name: Repository checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-        with:
-          fetch-depth: 0
-          persist-credentials: false
+            const FROZEN_STATE = `${MARKER}
+            > [!IMPORTANT]
+            > An -rc1 tag has been created and a release is being prepared, so please note that PRs introducing new features and APIs will be held back until the new version has been released.`;
 
-      - name: Development Freezer
-        uses: redhat-plumbers-in-action/devel-freezer@ad766eafd555b28d2cb8e27937835983f9c3d173
-        with:
-          pr-number: ${{ fromJSON(steps.artifact.outputs.pr-metadata-json).number }}
-          # delay start of validation to allow for some milestone/labels tweaking
-          delay: 20
-          token: ${{ secrets.GITHUB_TOKEN }}
+            const UNFREEZE_STATE = `${MARKER}
+            > [!NOTE]
+            > We had successfully released a new major release. We are no longer in a development freeze phase.
+            > We will try our best to get back to your PR as soon as possible. Thank you for your patience.`;
+
+            // Get the latest tag via API (no checkout needed).
+            const { data: tags } = await github.rest.repos.listTags({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              per_page: 1,
+            });
+
+            if (tags.length === 0) {
+              core.info('No tags found, skipping');
+              return;
+            }
+
+            const tag = tags[0].name;
+            core.info(`Latest tag: ${tag}`);
+
+            const isFrozen = FREEZE_TAG_PATTERN.test(tag);
+            core.info(`Development freeze active: ${isFrozen}`);
+
+            // Find any existing freeze comment from us.
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100,
+              },
+            );
+            const existing = comments.find((c) => c.body?.includes(MARKER));
+
+            if (isFrozen) {
+              // When a PR is first opened, delay to allow for milestone/label tweaking.
+              if (context.payload.action === 'opened') {
+                await new Promise((resolve) => setTimeout(resolve, 60000));
+              }
+
+              // Fetch current PR data since labels/milestone may have been
+              // added after the event that triggered this workflow.
+              const { data: pr } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+              });
+
+              // Check if PR has an allowed label.
+              const prLabels = pr.labels.map((l) => l.name);
+              if (prLabels.some((l) => ALLOWED_LABELS.has(l))) {
+                core.info(`PR has allowed label, skipping freeze comment`);
+                return;
+              }
+
+              // Check if the PR milestone matches the pre-release tag.
+              if (pr.milestone) {
+                const escaped = pr.milestone.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const milestonePattern = new RegExp(`^${escaped}\\S*$`);
+                if (milestonePattern.test(tag)) {
+                  core.info(`PR milestone "${pr.milestone.title}" matches tag "${tag}", skipping freeze comment`);
+                  return;
+                }
+              }
+
+              if (existing) {
+                if (existing.body !== FROZEN_STATE) {
+                  core.info('Updating existing comment with frozen state');
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: existing.id,
+                    body: FROZEN_STATE,
+                  });
+                } else {
+                  core.info('Freeze comment already up to date');
+                }
+              } else {
+                core.info('Creating freeze comment');
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: FROZEN_STATE,
+                });
+              }
+            } else {
+              // Not frozen — update existing freeze comment if one exists.
+              if (existing) {
+                if (existing.body !== UNFREEZE_STATE) {
+                  core.info('Updating existing comment with unfreeze state');
+                  await github.rest.issues.updateComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    comment_id: existing.id,
+                    body: UNFREEZE_STATE,
+                  });
+                } else {
+                  core.info('Unfreeze comment already up to date');
+                }
+              } else {
+                core.info('Not frozen and no existing freeze comment, nothing to do');
+              }
+            }
