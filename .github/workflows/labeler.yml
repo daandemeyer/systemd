@@ -1,5 +1,4 @@
 ---
-# vi: ts=2 sw=2 et:
 # SPDX-License-Identifier: LGPL-2.1-or-later
 #
 name: "Pull Request Labeler"
@@ -7,130 +6,106 @@ name: "Pull Request Labeler"
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, closed]
-    paths-ignore:
-      - '.github/labeler.yml'
-      - '.github/workflows/labeler.yml'
-  # Allow testing changes made to the labeler configuration
-  pull_request:
-    paths:
-      - '.github/labeler.yml'
-      - '.github/workflows/labeler.yml'
-  issue_comment:
-    types: [created]
-
-permissions:
-  contents: read
 
 jobs:
   triage:
-    if: github.repository == 'systemd/systemd'
     runs-on: ubuntu-24.04
     permissions:
       pull-requests: write
 
     steps:
-    - name: Repository checkout
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
-      if: github.event_name == 'pull_request'
-      with:
-        persist-credentials: false
-
-    - name: Label PR based on policy in labeler.yml
+    - name: Label PR based on changed files
       uses: actions/labeler@634933edcd8ababfe52f92936142cc22ac488b1b
       if: startsWith(github.event_name, 'pull_request') && github.base_ref == 'main' && github.event.action != 'closed'
       with:
         repo-token: "${{ secrets.GITHUB_TOKEN }}"
         configuration-path: .github/labeler.yml
-        sync-labels: false
+        sync-labels: true
 
-    - name: Set or remove labels based on systemd development workflow
+    - name: Manage workflow labels
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
-      if: startsWith(github.event_name, 'pull_request') && github.event.action != 'closed' && !github.event.pull_request.draft
       with:
         script: |
-          response = await github.rest.issues.listLabelsOnIssue({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-          });
+          // Handle PR closed/merged: remove workflow labels.
+          if (context.payload.action === 'closed') {
+            const payloadLabels = new Set(context.payload.pull_request.labels.map(l => l.name));
 
-          original = new Set(response.data.map(l => l.name));
-          labels = new Set(original);
+            const toRemove = ["please-review",
+                              "reviewed/needs-rework 🔨",
+                              "ci-fails/needs-rework 🔥",
+                              "needs-rebase",
+                              "good-to-merge/waiting-for-ci 👍",
+                              "good-to-merge/after-next-release",
+                              "good-to-merge/with-minor-suggestions",
+                              "good-to-merge/waiting-for-reporter-feedback 👍",
+                              "needs-discussion 🤔",
+                              "needs-reporter-feedback ❓",
+                              "dont-merge 💣",
+                              "squash-on-merge",
+                              "quick-review 🏃‍♂️"].filter(l => payloadLabels.has(l));
 
-          good_to_merge = new Set([
+            await Promise.all(toRemove.map(label =>
+              github.rest.issues.removeLabel({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                name: label,
+              }).catch(e => {
+                // Ignore 404 in case the label was already removed.
+                if (e.status !== 404) throw e;
+              })
+            ));
+            return;
+          }
+
+          // Non-closed PR events: manage workflow labels for non-draft PRs.
+          if (context.payload.pull_request.draft)
+            return;
+
+          const payloadLabels = new Set(context.payload.pull_request.labels.map(l => l.name));
+
+          const good_to_merge = new Set([
             "good-to-merge/waiting-for-ci 👍",
             "good-to-merge/after-next-release",
             "good-to-merge/with-minor-suggestions",
             "good-to-merge/waiting-for-reporter-feedback 👍",
           ]);
 
-          if (Array.from(labels).filter(l => good_to_merge.has(l)).length == 0) {
-            labels.add("please-review");
+          const labelsToAdd = [];
+          if (!Array.from(payloadLabels).some(l => good_to_merge.has(l))) {
+            labelsToAdd.push("please-review");
           }
 
-          for (const label of ["reviewed/needs-rework 🔨",
-                               "ci-fails/needs-rework 🔥",
-                               "ci-failure-appears-unrelated",
-                               "needs-rebase"]) {
-            labels.delete(label);
-          }
+          // Determine workflow labels to remove (only those currently present).
+          const labelsToRemove = ["reviewed/needs-rework 🔨",
+                                  "ci-fails/needs-rework 🔥",
+                                  "ci-failure-appears-unrelated",
+                                  "needs-rebase"].filter(l => payloadLabels.has(l));
 
-          if (labels.size != original.size || Array.from(labels).some(l => !original.has(l))) {
-            await github.rest.issues.setLabels({
+          // Execute all adds and removes in parallel.
+          const ops = [];
+
+          if (labelsToAdd.length > 0) {
+            core.info(`Adding labels: ${JSON.stringify(labelsToAdd)}`);
+            ops.push(github.rest.issues.addLabels({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              labels: Array.from(labels),
-            });
+              labels: labelsToAdd,
+            }));
           }
 
-    - name: Add please-review label on command in issue comment
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
-      if: github.event_name == 'issue_comment' && github.event.issue.pull_request && startsWith(github.event.comment.body, '/please-review')
-      with:
-        script: |
-          await github.rest.issues.addLabels({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            labels: ["please-review"]
-          })
-
-    - name: Remove specific labels when PR is closed or merged
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
-      if: startsWith(github.event_name, 'pull_request') && github.event.action == 'closed'
-      with:
-        script: |
-          response = await github.rest.issues.listLabelsOnIssue({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-          });
-
-          original = new Set(response.data.map(l => l.name));
-          labels = new Set(original);
-
-          for (const label of ["please-review",
-                               "reviewed/needs-rework 🔨",
-                               "ci-fails/needs-rework 🔥",
-                               "needs-rebase",
-                               "good-to-merge/waiting-for-ci 👍",
-                               "good-to-merge/after-next-release",
-                               "good-to-merge/with-minor-suggestions",
-                               "good-to-merge/waiting-for-reporter-feedback 👍",
-                               "needs-discussion 🤔",
-                               "needs-reporter-feedback ❓",
-                               "dont-merge 💣",
-                               "squash-on-merge",
-                               "quick-review 🏃‍♂️"]) {
-            labels.delete(label);
-          }
-
-          if (labels.size != original.size || Array.from(labels).some(l => !original.has(l))) {
-            await github.rest.issues.setLabels({
+          for (const label of labelsToRemove) {
+            core.info(`Removing label: ${label}`);
+            ops.push(github.rest.issues.removeLabel({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              labels: Array.from(labels),
-            });
+              name: label,
+            }).catch(e => {
+              // Ignore 404 in case the label was already removed.
+              if (e.status !== 404) throw e;
+            }));
           }
+
+          await Promise.all(ops);
