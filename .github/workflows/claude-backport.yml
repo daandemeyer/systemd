@@ -1,0 +1,68 @@
+# Runs every 3 days to backport commits through the stable branch chain:
+#   main → latest stable (N+1) → previous stable (N)
+#
+# Each stage is handled by the reusable claude-backport-stage.yml workflow.
+# The two stages run on separate schedules (6 hours apart) so the main→N+1
+# PR can be merged before N+1→N picks up those commits. On workflow_dispatch,
+# both stages run sequentially.
+
+name: Claude Backport
+
+on:
+  schedule:
+    - cron: "0 6 */3 * *"    # main → N+1
+    - cron: "0 12 */3 * *"   # N+1 → N
+  workflow_dispatch: {}
+
+concurrency:
+  group: claude-backport
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    if: github.repository == 'systemd/systemd'
+
+    permissions:
+      contents: read
+
+    outputs:
+      stable_latest: ${{ steps.branches.outputs.stable_latest }}
+      stable_previous: ${{ steps.branches.outputs.stable_previous }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Determine stable branches
+        id: branches
+        run: |
+          mapfile -t branches < <(git branch -r --sort=-version:refname \
+            | grep 'origin/v[0-9]\+-stable' \
+            | sed 's|origin/||;s/^[[:space:]]*//' \
+            | head -2)
+          echo "stable_latest=${branches[0]}" >> "$GITHUB_OUTPUT"
+          echo "stable_previous=${branches[1]}" >> "$GITHUB_OUTPUT"
+          echo "Latest stable branch: ${branches[0]}"
+          echo "Previous stable branch: ${branches[1]}"
+
+  backport-latest:
+    needs: setup
+    if: github.event.schedule != '0 12 */3 * *'
+    uses: ./.github/workflows/claude-backport-stage.yml
+    with:
+      source_branch: main
+      target_branch: ${{ needs.setup.outputs.stable_latest }}
+      selective: true
+    secrets: inherit
+
+  backport-previous:
+    needs: setup
+    if: github.event.schedule == '0 12 */3 * *'
+    uses: ./.github/workflows/claude-backport-stage.yml
+    with:
+      source_branch: ${{ needs.setup.outputs.stable_latest }}
+      target_branch: ${{ needs.setup.outputs.stable_previous }}
+      selective: false
+    secrets: inherit

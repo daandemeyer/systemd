@@ -1,0 +1,424 @@
+# Reusable workflow that backports commits from one branch to another.
+# Called by claude-backport.yml for each stage of the backport chain.
+#
+# Architecture: Two jobs for least-privilege:
+#   1. "backport" — runs Claude with read-only repo access, produces structured
+#      JSON output with the patch and metadata
+#   2. "push"     — applies the patch, pushes the branch, and creates/updates a PR
+
+name: Claude Backport Stage
+
+on:
+  workflow_call:
+    inputs:
+      source_branch:
+        description: "Branch to pick commits from (e.g. main, v259-stable)"
+        required: true
+        type: string
+      target_branch:
+        description: "Branch to backport into (e.g. v259-stable, v258-stable)"
+        required: true
+        type: string
+      selective:
+        description: "Whether to selectively pick backport candidates (true for main→stable, false for stable→stable)"
+        required: true
+        type: boolean
+
+jobs:
+  backport:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      pull-requests: read   # Query PRs for needs-stable-backport label
+      issues: read          # Read issue/PR comments
+      id-token: write       # Authenticate with AWS via OIDC
+
+    outputs:
+      structured_output: ${{ steps.claude.outputs.structured_output }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          fetch-depth: 0          # Full history needed for cherry-pick
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
+          role-session-name: GitHubActions-Claude-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@26ec041249acb0a944c0a47b6c0c13f05dbc5b44
+        env:
+          BACKPORT_SCHEMA: >-
+            {
+              "type": "object",
+              "required": ["patch", "summary", "skipped", "conflicts", "errors"],
+              "properties": {
+                "patch": {
+                  "type": "string",
+                  "description": "The output of git format-patch --stdout, or empty string if nothing to backport"
+                },
+                "summary": {
+                  "type": "string",
+                  "description": "One-line-per-commit summary of what was backported (git log --oneline output), or empty string"
+                },
+                "skipped": {
+                  "type": "string",
+                  "description": "Markdown table of commits considered but not backported, or empty string"
+                },
+                "conflicts": {
+                  "type": "string",
+                  "description": "Markdown table of commits that required merge conflict resolution, or empty string"
+                },
+                "errors": {
+                  "type": "string",
+                  "description": "Markdown list of errors encountered during the backport process, or empty string"
+                }
+              }
+            }
+        with:
+          use_bedrock: "true"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          track_progress: false
+          additional_permissions: |
+            issues: read
+            pull-requests: read
+          claude_args: |
+            --model us.anthropic.claude-opus-4-6-v1
+            --max-turns 100
+            --allowedTools "
+                Read,Edit,Write,LS,Grep,Glob,Task,
+                Bash(git:*),Bash(cat:*),Bash(test:*),Bash(printf:*),Bash(jq:*),
+                Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(find:*),Bash(ls:*),
+                Bash(wc:*),Bash(diff:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),
+                Bash(uniq:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),
+                Bash(touch:*),Bash(tee:*),
+                mcp__github__get_pull_request,
+                mcp__github__get_pull_request_diff,
+                mcp__github__get_pull_request_files,
+                mcp__github__get_pull_request_reviews,
+                mcp__github__get_pull_request_comments,
+                mcp__github__get_pull_request_status,
+                mcp__github__get_issue_comments,
+                "
+            --json-schema '${{ env.BACKPORT_SCHEMA }}'
+          prompt: |
+              You are a backport assistant for the systemd project. Your goal is to
+              identify commits from the last 4 days on the `${{ inputs.source_branch }}`
+              branch that are good candidates for backporting to the
+              `${{ inputs.target_branch }}` branch, and cherry-pick them.
+
+              ## Step 1: Identify candidate commits
+
+              ${{ inputs.selective && '### 1a: Check PRs with the `needs-stable-backport` label
+
+              Use `mcp__github__get_pull_request` and related tools to find merged PRs
+              that have the `needs-stable-backport` label. Search for recently merged PRs
+              by listing them with state "closed" and checking which ones were merged in
+              the last 4 days.
+
+              For each such PR:
+              - Read the PR description and comments using `mcp__github__get_pull_request`,
+                `mcp__github__get_pull_request_comments`, and `mcp__github__get_issue_comments`.
+              - Look for comments from maintainers that specify which commits should be
+                backported (e.g. "please backport <sha>" or "backport the fix in <sha>").
+              - If specific commits are mentioned in comments, backport exactly those.
+              - If no specific commits are mentioned, backport all commits from the PR''s
+                merge commit (use `git log --oneline --first-parent` to find the merge,
+                then `git log --oneline <merge>^..<merge>` to list the PR''s commits).
+
+              ### 1b: Scan recent commits' || '### Scan recent commits' }}
+
+              Run `git log --oneline --since='4 days ago' origin/${{ inputs.source_branch }}`
+              to list recent commits.
+
+              For each commit, examine it with `git show <sha>` and decide whether it
+              should be backported.
+
+              ${{ inputs.selective && 'Good backport candidates are:
+              - Bug fixes
+              - Security fixes
+              - Documentation fixes
+              - Small, self-contained improvements that fix real problems
+              - Changes to the `mkosi/` directory (these can generally all be backported safely)
+              - Changes to CI/CD workflows and GitHub Actions (these can generally all be backported safely)
+
+              Do NOT backport:
+              - New features or API additions
+              - Large refactors
+              - Commits that are clearly only relevant to unreleased functionality
+              - Merge commits
+              - Commits already identified via the `needs-stable-backport` PRs in step 1a'
+              || 'Since you are backporting between stable branches, the bar for inclusion
+              is much lower: backport everything that applies cleanly or with minor
+              conflict resolution. The commits on the source stable branch have already
+              been vetted for backporting, so you should carry them forward unless they
+              clearly do not apply to the target branch.}}
+
+              ## Step 2: Cherry-pick
+
+              If you found candidates, sort them in the order they appear on
+              `${{ inputs.source_branch }}` (oldest first) to minimize conflicts. You can
+              use `git log --oneline --ancestry-path <oldest>^..<newest>` or simply
+              reverse the output of `git log` to get chronological order.
+
+              1. Create a local branch from the target branch:
+                 `git checkout -b claude/backport-to-${{ inputs.target_branch }} origin/${{ inputs.target_branch }}`
+
+              2. Cherry-pick each candidate commit **in chronological order** (oldest
+                 first, matching the order they were merged into
+                 `${{ inputs.source_branch }}`) using:
+                 `git cherry-pick -x <sha>`
+
+                 The `-x` flag is mandatory — it records the original commit hash.
+
+              3. If a cherry-pick has conflicts, try to resolve them:
+                 - Read the conflicting files and understand both sides of the conflict.
+                 - Apply the intent of the original commit to the stable branch code.
+                 - After resolving all conflicts in a file, `git add` it.
+                 - Once all conflicts are resolved, run `git cherry-pick --continue`.
+                 - Track which commits needed conflict resolution and briefly describe
+                   what conflicts were resolved for each (for the `conflicts` table).
+                 - If a conflict is too complex to resolve confidently, abort with
+                   `git cherry-pick --abort` and skip the commit instead (add it to
+                   the `skipped` table with reason "unresolvable merge conflict").
+
+              4. After all cherry-picks are done, capture the patch:
+                 `git format-patch origin/${{ inputs.target_branch }} --stdout`
+                 Put the full output in the `patch` field of your JSON response.
+
+              5. Capture the summary:
+                 `git log --oneline origin/${{ inputs.target_branch }}..HEAD`
+                 Put the output in the `summary` field.
+
+              ## Step 3: Build the metadata tables
+
+              ### Skipped commits
+
+              Set the `skipped` field to a markdown table of commits that were considered
+              but NOT backported:
+
+              ```
+              | Commit | Title | Reason |
+              |--------|-------|--------|
+              | `<short-sha>` | Short commit title | Why it was skipped |
+              ```
+
+              Only include commits that are noteworthy skips:
+              - Skipped due to unresolvable merge conflicts
+              - Commits that looked like plausible backport candidates but were
+                skipped for a non-obvious reason worth documenting
+
+              Do NOT include commits skipped for obvious reasons (new features,
+              large refactors, clearly unreleased functionality, etc.). Keep this
+              table terse.
+
+              If there are no noteworthy skipped commits, set `skipped` to an empty string.
+
+              ### Resolved conflicts
+
+              Set the `conflicts` field to a markdown table of commits where merge
+              conflicts had to be resolved during cherry-pick:
+
+              ```
+              | Commit | Title | Resolution |
+              |--------|-------|------------|
+              | `<short-sha>` | Short commit title | Brief description of what conflicts were resolved |
+              ```
+
+              If no cherry-picks had conflicts, set `conflicts` to an empty string.
+
+              ### Errors
+
+              Throughout all steps, track any errors that prevented you from doing
+              your job fully: permission denials (403, "Resource not accessible by
+              integration"), tools that were not available, rate limits, or any other
+              failures that degraded the backport quality. Set the `errors` field to
+              a markdown list of each failed tool/action and the error message, so
+              maintainers can fix the workflow configuration. If there were no errors,
+              set `errors` to an empty string.
+
+              ## Step 4: Return JSON
+
+              Return the final JSON object with `patch`, `summary`, `skipped`,
+              `conflicts`, and `errors` fields. If no candidates were found or all
+              cherry-picks failed,
+              return empty strings for `patch` and `summary`.
+
+              ## Important
+
+              - Always use `git cherry-pick -x`. Never omit the `-x` flag.
+              - Never force-push or modify remote branches.
+              - When resolving conflicts, preserve the intent of the original commit.
+                If unsure, skip the commit rather than introducing incorrect code.
+              - Write your final assessment to stdout so it appears in the logs.
+
+  push:
+    runs-on: ubuntu-latest
+    needs: backport
+    if: always() && needs.backport.result == 'success'
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    env:
+      SOURCE_BRANCH: ${{ inputs.source_branch }}
+      TARGET_BRANCH: ${{ inputs.target_branch }}
+      BRANCH_NAME: claude/backport-to-${{ inputs.target_branch }}
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.TRIGGER_CHECKS_ON_WORKFLOW_APP_ID }}
+          private-key: ${{ secrets.TRIGGER_CHECKS_ON_WORKFLOW_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ inputs.target_branch }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Apply patch and push
+        id: apply
+        env:
+          STRUCTURED_OUTPUT: ${{ needs.backport.outputs.structured_output }}
+        run: |
+          patch=$(echo "$STRUCTURED_OUTPUT" | jq -r '.patch // empty')
+
+          if [ -z "$patch" ]; then
+            echo "No commits to backport."
+            echo "has_commits=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_commits=true" >> "$GITHUB_OUTPUT"
+
+          git checkout -b "$BRANCH_NAME"
+          echo "$patch" | git am
+
+          # Force-push since we always rebuild this branch from the target branch
+          git push -f origin "$BRANCH_NAME"
+
+      - name: Create or update pull request
+        if: steps.apply.outputs.has_commits == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        env:
+          STRUCTURED_OUTPUT: ${{ needs.backport.outputs.structured_output }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branchName = process.env.BRANCH_NAME;
+            const sourceBranch = process.env.SOURCE_BRANCH;
+            const targetBranch = process.env.TARGET_BRANCH;
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            const raw = process.env.STRUCTURED_OUTPUT;
+            let summary = "";
+            let skipped = "";
+            let conflicts = "";
+            let errors = "";
+            if (raw) {
+              try {
+                const data = JSON.parse(raw);
+                summary = (data.summary || "").trim();
+                skipped = (data.skipped || "").trim();
+                conflicts = (data.conflicts || "").trim();
+                errors = (data.errors || "").trim();
+              } catch (e) {
+                console.log(`Failed to parse structured output: ${e.message}`);
+              }
+            }
+
+            const parts = [
+              "## Automated backport to `" + targetBranch + "`",
+              "",
+              "The following commits from `" + sourceBranch + "` were cherry-picked:",
+              "",
+              "```",
+              summary,
+              "```",
+              "",
+              "Each commit was cherry-picked with `git cherry-pick -x` to preserve provenance.",
+            ];
+
+            if (conflicts) {
+              parts.push(
+                "",
+                "### Resolved merge conflicts",
+                "",
+                "The following commits required manual conflict resolution during cherry-pick.",
+                "Please review these carefully.",
+                "",
+                conflicts,
+              );
+            }
+
+            if (skipped) {
+              parts.push(
+                "",
+                "### Skipped commits",
+                "",
+                skipped,
+              );
+            }
+
+            if (errors) {
+              parts.push(
+                "",
+                "### Errors",
+                "",
+                errors,
+              );
+            }
+
+            parts.push(
+              "",
+              "Please review the changes and merge when ready.",
+              "",
+              `[Workflow run](${runUrl})`,
+            );
+
+            const body = parts.join("\n");
+
+            /* Check if there is already an open PR from this branch. */
+            const {data: existingPRs} = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${branchName}`,
+              base: targetBranch,
+              state: "open",
+            });
+
+            if (existingPRs.length > 0) {
+              const pr = existingPRs[0];
+              console.log(`Updating existing PR #${pr.number}`);
+              await github.rest.pulls.update({
+                owner,
+                repo,
+                pull_number: pr.number,
+                title: `Backport recent fixes to ${targetBranch}`,
+                body: body,
+              });
+              console.log(`PR #${pr.number} updated: ${pr.html_url}`);
+            } else {
+              console.log("Creating new PR");
+              const {data: pr} = await github.rest.pulls.create({
+                owner,
+                repo,
+                title: `Backport recent fixes to ${targetBranch}`,
+                body: body,
+                head: branchName,
+                base: targetBranch,
+              });
+              console.log(`PR #${pr.number} created: ${pr.html_url}`);
+            }

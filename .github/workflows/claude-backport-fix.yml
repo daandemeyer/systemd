@@ -1,0 +1,318 @@
+# Reacts to CI failures on backport PRs (claude/backport-to-* branches) and
+# attempts to fix them automatically.
+#
+# Architecture: Two jobs for least-privilege:
+#   1. "fix"  — runs Claude to diagnose the CI failure, fix the code, and produce
+#      a patch with the fix
+#   2. "push" — applies the patch and pushes it to the backport branch
+
+name: Claude Backport Fix
+
+on:
+  workflow_run:
+    workflows: ["*"]
+    types: [completed]
+    branches: ["claude/backport-to-*"]
+
+concurrency:
+  group: claude-backport-fix-${{ github.event.workflow_run.head_branch }}
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+
+    if: |
+      github.repository == 'systemd/systemd' &&
+      github.event.workflow_run.conclusion == 'failure' &&
+      startsWith(github.event.workflow_run.head_branch, 'claude/backport-to-')
+
+    permissions:
+      contents: read
+      actions: read          # Read workflow run logs
+      pull-requests: read    # Read PR data
+      id-token: write        # Authenticate with AWS via OIDC
+
+    outputs:
+      structured_output: ${{ steps.claude.outputs.structured_output }}
+      branch: ${{ github.event.workflow_run.head_branch }}
+
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@8df5847569e6427dd6c4fb1cf565c83acfa8afa7
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/${{ secrets.AWS_ROLE_NAME }}
+          role-session-name: GitHubActions-Claude-${{ github.run_id }}
+          aws-region: us-east-1
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@26ec041249acb0a944c0a47b6c0c13f05dbc5b44
+        env:
+          FIX_SCHEMA: >-
+            {
+              "type": "object",
+              "required": ["patch", "description", "errors"],
+              "properties": {
+                "patch": {
+                  "type": "string",
+                  "description": "The output of git format-patch --stdout of the entire rebased branch, or empty string if no fix was possible"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "A brief description of the CI failure and what was fixed, or why no fix was possible"
+                },
+                "errors": {
+                  "type": "string",
+                  "description": "Markdown list of errors encountered during the fix process, or empty string"
+                }
+              }
+            }
+        with:
+          use_bedrock: "true"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          track_progress: false
+          additional_permissions: |
+            actions: read
+          claude_args: |
+            --model us.anthropic.claude-opus-4-6-v1
+            --max-turns 100
+            --allowedTools "
+                Read,Edit,Write,LS,Grep,Glob,Task,
+                Bash(git:*),Bash(cat:*),Bash(test:*),Bash(printf:*),Bash(jq:*),
+                Bash(head:*),Bash(tail:*),Bash(grep:*),Bash(find:*),Bash(ls:*),
+                Bash(wc:*),Bash(diff:*),Bash(sed:*),Bash(awk:*),Bash(sort:*),
+                Bash(uniq:*),Bash(mkdir:*),Bash(cp:*),Bash(mv:*),Bash(rm:*),
+                Bash(touch:*),Bash(tee:*),
+                mcp__github__get_pull_request,
+                mcp__github__get_pull_request_diff,
+                mcp__github__get_pull_request_files,
+                mcp__github__get_pull_request_comments,
+                mcp__github__get_pull_request_status,
+                mcp__github__get_issue_comments,
+                mcp__github_ci__get_ci_status,
+                mcp__github_ci__get_workflow_run_details,
+                mcp__github_ci__download_job_log,
+                "
+            --json-schema '${{ env.FIX_SCHEMA }}'
+          prompt: |
+              You are a CI fix assistant for the systemd project. A CI check has failed
+              on branch `${{ github.event.workflow_run.head_branch }}`, which is an
+              automated backport branch. Your goal is to diagnose the failure and fix it.
+
+              ## Step 1: Diagnose the failure
+
+              The failed workflow run ID is `${{ github.event.workflow_run.id }}`.
+
+              Use `mcp__github_ci__get_workflow_run_details` to get details about the
+              failed run (pass owner `${{ github.repository_owner }}`,
+              repo `${{ github.event.repository.name }}`,
+              run_id `${{ github.event.workflow_run.id }}`).
+
+              For each failed job, use `mcp__github_ci__download_job_log` to fetch the
+              failure logs. Identify the root cause of the failure.
+
+              ## Step 2: Identify the responsible commit
+
+              Determine which commit(s) on this branch introduced the failure. Use
+              `git log --oneline` to see the commits on the branch. Cross-reference
+              the failure (e.g. which file/function fails) with the commits to find
+              the one that caused the issue.
+
+              ## Step 3: Fix the issue
+
+              Based on the failure logs, fix the code on the current branch. Common
+              issues in backport branches include:
+              - Missing includes or forward declarations
+              - API differences between the main and stable branches
+              - Build system changes (meson.build) that reference files not present
+                on the stable branch
+              - Test failures due to changed behavior
+
+              Use Read, Edit, and Write tools to modify files as needed. For each fix,
+              create a `fixup!` commit targeting the original commit that introduced
+              the problem:
+              ```
+              git add -A
+              git commit -m "fixup! <original commit's subject line>"
+              ```
+
+              You can create multiple `fixup!` commits if multiple commits need fixes.
+
+              ## Step 4: Rebase to squash fixups
+
+              After creating all fixup commits, determine the merge base of the branch:
+              ```
+              git merge-base HEAD origin/<base-branch>
+              ```
+              (The base branch is the part of the branch name after `claude/backport-to-`,
+              e.g. for `claude/backport-to-v259-stable` it is `v259-stable`.)
+
+              Then run an autosquash rebase to fold the fixups into their target commits:
+              ```
+              git rebase --autosquash <merge-base>
+              ```
+
+              Finally, capture the full rebased branch as a patch:
+              ```
+              git format-patch <merge-base>..HEAD --stdout
+              ```
+              Put the output in the `patch` field.
+
+              Set the `description` field to a brief explanation of the CI failure
+              and what was fixed.
+
+              ## Step 5: If no fix is possible
+
+              If you cannot determine a fix (e.g. the failure is flaky, infrastructure-
+              related, or too complex), set `patch` to an empty string and explain
+              why in the `description` field.
+
+              ## Errors
+
+              Throughout all steps, track any errors that prevented you from doing
+              your job fully: permission denials (403, "Resource not accessible by
+              integration"), tools that were not available, rate limits, or any other
+              failures that degraded the fix quality. Set the `errors` field to a
+              markdown list of each failed tool/action and the error message, so
+              maintainers can fix the workflow configuration. If there were no errors,
+              set `errors` to an empty string.
+
+              ## Important
+
+              - Only fix issues caused by the backport. Do not make unrelated changes.
+              - Keep fixes minimal and focused.
+              - Never force-push or modify remote branches.
+              - Write your diagnosis to stdout so it appears in the logs.
+
+  push:
+    runs-on: ubuntu-latest
+    needs: fix
+    if: always() && needs.fix.result == 'success'
+
+    permissions:
+      contents: write
+      pull-requests: write
+
+    env:
+      BRANCH_NAME: ${{ needs.fix.outputs.branch }}
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.TRIGGER_CHECKS_ON_WORKFLOW_APP_ID }}
+          private-key: ${{ secrets.TRIGGER_CHECKS_ON_WORKFLOW_APP_PRIVATE_KEY }}
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+        with:
+          ref: ${{ needs.fix.outputs.branch }}
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Apply fix and push
+        id: apply
+        env:
+          STRUCTURED_OUTPUT: ${{ needs.fix.outputs.structured_output }}
+        run: |
+          patch=$(echo "$STRUCTURED_OUTPUT" | jq -r '.patch // empty')
+          description=$(echo "$STRUCTURED_OUTPUT" | jq -r '.description // empty')
+
+          if [ -z "$patch" ]; then
+            echo "No fix produced."
+            if [ -n "$description" ]; then
+              echo "Reason: $description"
+            fi
+            echo "has_fix=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "has_fix=true" >> "$GITHUB_OUTPUT"
+
+          # Determine the base branch from the branch name (e.g. claude/backport-to-v259-stable -> v259-stable)
+          base_branch="${BRANCH_NAME#claude/backport-to-}"
+          merge_base=$(git merge-base HEAD "origin/$base_branch")
+
+          # Reset to the base and apply the rebased patch
+          git reset --hard "$merge_base"
+          echo "$patch" | git am
+
+          # Force-push since the fixups were squashed into existing commits
+          git push -f origin "$BRANCH_NAME"
+
+      - name: Comment on PR
+        if: steps.apply.outputs.has_fix == 'true'
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        env:
+          STRUCTURED_OUTPUT: ${{ needs.fix.outputs.structured_output }}
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const branchName = process.env.BRANCH_NAME;
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+
+            const raw = process.env.STRUCTURED_OUTPUT;
+            let description = "";
+            let errors = "";
+            if (raw) {
+              try {
+                const data = JSON.parse(raw);
+                description = (data.description || "").trim();
+                errors = (data.errors || "").trim();
+              } catch (e) {
+                console.log(`Failed to parse structured output: ${e.message}`);
+              }
+            }
+
+            /* Find the open PR for this branch. */
+            const {data: prs} = await github.rest.pulls.list({
+              owner,
+              repo,
+              head: `${owner}:${branchName}`,
+              state: "open",
+            });
+
+            if (prs.length === 0) {
+              console.log("No open PR found for branch " + branchName);
+              return;
+            }
+
+            const pr = prs[0];
+            const parts = [
+              "### CI fix applied",
+              "",
+              description,
+            ];
+
+            if (errors) {
+              parts.push(
+                "",
+                "### Errors",
+                "",
+                errors,
+              );
+            }
+
+            parts.push(
+              "",
+              `[Fix workflow run](${runUrl})`,
+            );
+
+            const body = parts.join("\n");
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pr.number,
+              body: body,
+            });
+
+            console.log(`Comment posted on PR #${pr.number}`);
