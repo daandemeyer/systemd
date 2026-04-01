@@ -802,16 +802,24 @@ static void cmdline_append_and_measure_smbios(char16_t **cmdline, int *parameter
 
         /* SMBIOS OEM Strings data is controlled by the host admin and not covered by the VM attestation, so
          * MUST NOT be trusted when in a confidential VM */
-        if (is_confidential_vm())
+        if (is_confidential_vm()) {
+                log_debug("In confidential VM, not looking for extra kernel command line arguments in SMBIOS.");
                 return;
+        }
 
         const char *extra = smbios_find_oem_string("io.systemd.stub.kernel-cmdline-extra=", /* after= */ NULL);
-        if (!extra)
+        if (!extra) {
+                log_debug("No extra kernel command line arguments found in SMBIOS.");
                 return;
+        }
 
         _cleanup_free_ char16_t *extra16 = mangle_stub_cmdline(xstr8_to_16(extra));
-        if (isempty(extra16))
+        if (isempty(extra16)) {
+                log_debug("Extra kernel command line arguments from SMBIOS empty after mangling.");
                 return;
+        }
+
+        log_debug("Extra kernel command line arguments from SMBIOS: %ls", extra16);
 
         /* SMBIOS strings are measured in PCR1, but we also want to measure them in our specific PCR12, as
          * firmware-owned PCRs are very difficult to use as they'll contain unpredictable measurements that
