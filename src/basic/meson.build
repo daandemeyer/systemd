@@ -56,6 +56,7 @@ basic_sources = files(
         'io-util.c',
         'iovec-util.c',
         'iovec-wrapper.c',
+        'iref.c',
         'keyring-util.c',
         'label.c',
         'limits-util.c',

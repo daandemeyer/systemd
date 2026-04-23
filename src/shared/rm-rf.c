@@ -10,6 +10,7 @@
 #include "errno-util.h"
 #include "fd-util.h"
 #include "fs-util.h"
+#include "iref.h"
 #include "log.h"
 #include "mountpoint-util.h"
 #include "path-util.h"
