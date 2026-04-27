@@ -65,6 +65,7 @@ DEVEL_PACKAGES=(
     libqrencode-dev
     libssl-dev
     libtss2-dev
+    liburing-dev
     libxkbcommon-dev
     libxtables-dev
     libzstd-dev

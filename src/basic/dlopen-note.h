@@ -63,6 +63,17 @@
 #  define LIBLZMA_NOTE(priority)
 #endif
 
+#if HAVE_LIBURING
+#  define LIBURING_NOTE(priority)                                       \
+        ELF_NOTE_DLOPEN_ANCHORED(                                       \
+                        uring,                                          \
+                        "Support for io_uring in sd-event",             \
+                        priority,                                       \
+                        "liburing.so.2")
+#else
+#  define LIBURING_NOTE(priority)
+#endif
+
 #if HAVE_ZLIB
 #  define LIBZ_NOTE(priority)                                           \
         ELF_NOTE_DLOPEN_ANCHORED(                                       \

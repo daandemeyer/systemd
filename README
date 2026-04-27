@@ -251,6 +251,7 @@ REQUIREMENTS:
         openssl >= 3.0.0 (optional, required to support DNS-over-TLS)
         p11-kit >= 0.23.3 (optional)
         libfido2 (optional)
+        liburing >= 2.3 (optional)
         tpm2-tss (optional)
         elfutils >= 177 (optional)
         polkit (optional)

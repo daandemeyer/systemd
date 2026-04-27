@@ -29,6 +29,7 @@ ADDITIONAL_TARGET_DEPS=(
     libqrencode-dev
     libssl-dev
     libtss2-dev
+    liburing-dev
     libxkbcommon-dev
     libzstd-dev
 )
