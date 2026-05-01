@@ -658,6 +658,7 @@ static int run(int argc, char *argv[]) {
         LIBPCRE2_NOTE(suggested);
         LIBSECCOMP_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         setlocale(LC_ALL, "");

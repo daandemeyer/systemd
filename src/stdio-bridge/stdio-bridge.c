@@ -10,6 +10,7 @@
 #include "build.h"
 #include "bus-internal.h"
 #include "bus-util.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "io-util.h"
 #include "log.h"
@@ -120,6 +121,8 @@ static int run(int argc, char *argv[]) {
         sd_id128_t server_id;
         bool is_unix;
         int in_fd, out_fd, r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

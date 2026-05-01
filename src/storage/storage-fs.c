@@ -17,6 +17,7 @@
 #include "device-private.h"
 #include "device-util.h"
 #include "dissect-image.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "fd-util.h"
 #include "fs-util.h"
@@ -796,6 +797,8 @@ static int parse_argv(int argc, char *argv[]) {
 
 static int run(int argc, char* argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

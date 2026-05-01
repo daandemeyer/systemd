@@ -300,6 +300,7 @@ static int run(int argc, char *argv[]) {
         LIBCRYPTO_NOTE(suggested);
         LIBCRYPTSETUP_NOTE(suggested);
         LIBMOUNT_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         setlocale(LC_ALL, "");

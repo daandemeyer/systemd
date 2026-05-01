@@ -13,6 +13,7 @@
 #include "bus-locator.h"
 #include "bus-util.h"
 #include "daemon-util.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "log.h"
 #include "main-func.h"
@@ -319,6 +320,8 @@ static int vl_server(void) {
 
 static int run(int argc, char* argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

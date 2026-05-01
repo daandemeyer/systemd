@@ -861,6 +861,7 @@ static int run(int argc, char **argv) {
 
         COMPRESS_DEFAULT_NOTE;
         LIBCURL_NOTE(required);
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

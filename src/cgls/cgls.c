@@ -10,6 +10,7 @@
 #include "bus-util.h"
 #include "cgroup-show.h"
 #include "cgroup-util.h"
+#include "dlopen-note.h"
 #include "log.h"
 #include "main-func.h"
 #include "output-mode.h"
@@ -154,6 +155,8 @@ static void show_cg_info(const char *path) {
 
 static int run(int argc, char *argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

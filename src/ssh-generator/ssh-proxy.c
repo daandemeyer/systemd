@@ -5,6 +5,7 @@
 #include "sd-varlink.h"
 
 #include "alloc-util.h"
+#include "dlopen-note.h"
 #include "fd-util.h"
 #include "io-util.h"
 #include "iovec-util.h"
@@ -398,6 +399,8 @@ static char *startswith_sep(const char *s, const char *prefix) {
 
 static int run(int argc, char* argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

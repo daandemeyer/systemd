@@ -13,6 +13,7 @@
 #include "bus-error.h"
 #include "bus-locator.h"
 #include "bus-util.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "fd-util.h"
 #include "format-table.h"
@@ -255,6 +256,8 @@ static int parse_argv(int argc, char *argv[], char ***remaining_args) {
 static int run(int argc, char *argv[]) {
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

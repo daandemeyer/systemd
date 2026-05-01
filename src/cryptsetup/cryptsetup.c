@@ -2745,6 +2745,7 @@ static int run(int argc, char *argv[]) {
         LIBFIDO2_NOTE(suggested);
         LIBMOUNT_NOTE(recommended);
         LIBP11KIT_NOTE(suggested);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         log_setup();

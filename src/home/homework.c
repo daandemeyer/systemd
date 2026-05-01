@@ -2226,6 +2226,7 @@ static int run(int argc, char *argv[]) {
         LIBMOUNT_NOTE(recommended);
         LIBP11KIT_NOTE(suggested);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         start = now(CLOCK_MONOTONIC);
 

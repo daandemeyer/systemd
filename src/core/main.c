@@ -4037,6 +4037,7 @@ int main(int argc, char *argv[]) {
         LIBPCRE2_NOTE(suggested);
         LIBSECCOMP_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
 #if SYSTEMD_MULTICALL_BINARY

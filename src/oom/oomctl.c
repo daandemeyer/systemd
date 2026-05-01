@@ -7,6 +7,7 @@
 #include "bus-error.h"
 #include "bus-locator.h"
 #include "bus-message-util.h"
+#include "dlopen-note.h"
 #include "log.h"
 #include "main-func.h"
 #include "pager.h"
@@ -73,6 +74,8 @@ static int parse_argv(int argc, char *argv[], char ***ret_args) {
 
 static int run(int argc, char* argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

@@ -465,6 +465,7 @@ static int run(const char *dest, const char *dest_early, const char *dest_late) 
         assert(dest);
 
         LIBCRYPTO_NOTE(suggested);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         r = proc_cmdline_parse(parse_proc_cmdline_item, /* userdata= */ NULL, /* flags= */ 0);

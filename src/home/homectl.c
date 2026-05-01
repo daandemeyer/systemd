@@ -5173,6 +5173,7 @@ static int run(int argc, char *argv[]) {
         LIBFIDO2_NOTE(suggested);
         LIBP11KIT_NOTE(suggested);
         LIBQRENCODE_NOTE(suggested);
+        LIBURING_NOTE(suggested);
         PASSWORD_NOTE(suggested);
 
         log_setup();

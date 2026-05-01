@@ -6148,6 +6148,7 @@ static int run(int argc, char *argv[]) {
         LIBMOUNT_NOTE(recommended);
         LIBSECCOMP_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
         (void) dlopen_cryptsetup(LOG_DEBUG);
         (void) dlopen_libacl(LOG_DEBUG);

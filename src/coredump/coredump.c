@@ -79,6 +79,7 @@ static int run(int argc, char *argv[]) {
         LIBDW_NOTE(suggested);
         LIBELF_NOTE(suggested);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         char **args = NULL;
         r = parse_argv(argc, argv, &args);

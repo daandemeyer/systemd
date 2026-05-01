@@ -10,6 +10,7 @@
 #include "bus-locator.h"
 #include "bus-map-properties.h"
 #include "bus-util.h"
+#include "dlopen-note.h"
 #include "fd-util.h"
 #include "fileio.h"
 #include "format-table.h"
@@ -483,6 +484,8 @@ static int parse_argv(int argc, char *argv[], char ***remaining_args) {
 static int run(int argc, char *argv[]) {
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         setlocale(LC_ALL, "");
         log_setup();

@@ -198,6 +198,7 @@ static int run(int argc, char* argv[]) {
 
         COMPRESS_JOURNAL_NOTE;
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         if (invoked_as(argv, "networkd"))
                 return run_networkd(argc, argv);

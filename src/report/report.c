@@ -1084,6 +1084,7 @@ static int run(int argc, char *argv[]) {
         int r;
 
         LIBCURL_NOTE(required);
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

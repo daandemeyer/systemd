@@ -225,6 +225,7 @@ int run_executor(int argc, char *argv[]) {
         LIBPAM_NOTE(recommended);
         LIBSECCOMP_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         /* We use safe_fork() for spawning sd-pam helper process, which internally calls rename_process().

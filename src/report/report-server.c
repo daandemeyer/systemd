@@ -2,6 +2,7 @@
 
 #include "sd-varlink.h"
 
+#include "dlopen-note.h"
 #include "log.h"
 #include "main-func.h"
 #include "report-server.h"
@@ -55,6 +56,8 @@ int report_server_add_signer_interface(sd_varlink_server *server, sd_varlink_met
 static int run(int argc, char *argv[]) {
         _cleanup_(sd_varlink_server_unrefp) sd_varlink_server *server = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

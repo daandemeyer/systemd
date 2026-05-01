@@ -10,6 +10,7 @@
 #include "bus-polkit.h"
 #include "device-private.h"
 #include "device-util.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "fd-util.h"
 #include "hashmap.h"
@@ -388,6 +389,8 @@ static int vl_server(void) {
 
 static int run(int argc, char* argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

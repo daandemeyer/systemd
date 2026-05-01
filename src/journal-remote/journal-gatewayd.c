@@ -14,6 +14,7 @@
 #include "alloc-util.h"
 #include "build.h"
 #include "bus-locator.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "fd-util.h"
 #include "fileio.h"
@@ -1245,6 +1246,7 @@ static int run(int argc, char *argv[]) {
         COMPRESS_JOURNAL_NOTE;
         LIBGNUTLS_NOTE(suggested);
         LIBMICROHTTPD_NOTE(required);
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

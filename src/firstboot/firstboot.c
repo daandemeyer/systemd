@@ -1735,6 +1735,7 @@ static int run(int argc, char *argv[]) {
         LIBCRYPTSETUP_NOTE(suggested);
         LIBMOUNT_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         PASSWORD_NOTE(suggested);
         TPM2_NOTE(suggested);
 

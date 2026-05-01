@@ -17,6 +17,7 @@
 #include "bus-map-properties.h"
 #include "bus-message-util.h"
 #include "bus-util.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "format-table.h"
 #include "hostname-setup.h"
@@ -920,6 +921,8 @@ static int run(int argc, char *argv[]) {
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         char **args = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         setlocale(LC_ALL, "");
         log_setup();

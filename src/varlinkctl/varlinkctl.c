@@ -18,6 +18,7 @@
 #include "bus-util.h"
 #include "chase.h"
 #include "devnum-util.h"
+#include "dlopen-note.h"
 #include "env-util.h"
 #include "errno-list.h"
 #include "errno-util.h"
@@ -1966,6 +1967,8 @@ VERB_COMMON_HELP_AUTO();
 
 static int run(int argc, char *argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

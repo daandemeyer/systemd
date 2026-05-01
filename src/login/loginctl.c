@@ -1627,6 +1627,7 @@ static int run(int argc, char *argv[]) {
         int r;
 
         COMPRESS_JOURNAL_NOTE;
+        LIBURING_NOTE(suggested);
 
         setlocale(LC_ALL, "");
         log_setup();

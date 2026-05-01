@@ -1481,6 +1481,7 @@ static int run(int argc, char* argv[]) {
         int r;
 
         LIBMOUNT_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

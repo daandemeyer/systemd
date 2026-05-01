@@ -15,6 +15,7 @@
 #include "cgroup-show.h"
 #include "cgroup-util.h"
 #include "cpu-set-util.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "fd-util.h"
 #include "fileio.h"
@@ -1316,6 +1317,8 @@ static int setup_loop(Context *c) {
 static int run(int argc, char *argv[]) {
         CGroupMask mask;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

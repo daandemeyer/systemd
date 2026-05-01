@@ -9,6 +9,7 @@
 #include "build.h"
 #include "bus-polkit.h"
 #include "constants.h"
+#include "dlopen-note.h"
 #include "hashmap.h"
 #include "json-util.h"
 #include "log.h"
@@ -332,6 +333,8 @@ static int run(int argc, char *argv[]) {
         _cleanup_strv_free_erase_ char **l = NULL;
         usec_t timeout;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

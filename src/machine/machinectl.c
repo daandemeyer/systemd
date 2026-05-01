@@ -2595,6 +2595,7 @@ static int run(int argc, char *argv[]) {
 
         COMPRESS_JOURNAL_NOTE;
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         setlocale(LC_ALL, "");
         log_setup();

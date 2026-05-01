@@ -496,6 +496,7 @@ static int run(int argc, char *argv[]) {
 
         LIBBLKID_NOTE(recommended);
         LIBCRYPTO_NOTE(required);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         log_setup();

@@ -7,6 +7,7 @@
 #include "alloc-util.h"
 #include "build.h"
 #include "bus-util.h"
+#include "dlopen-note.h"
 #include "event-util.h"
 #include "fd-util.h"
 #include "log.h"
@@ -167,6 +168,8 @@ static int run(int argc, char *argv[]) {
         int r;
 
         CLEANUP_ARRAY(forward_signal_sources, n_forward_signal_sources, event_source_unref_many);
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

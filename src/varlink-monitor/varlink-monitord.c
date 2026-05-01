@@ -8,6 +8,7 @@
 #include "alloc-util.h"
 #include "bpf-util.h"
 #include "bus-polkit.h"
+#include "dlopen-note.h"
 #include "hashmap.h"
 #include "json-util.h"
 #include "log.h"
@@ -368,6 +369,8 @@ static int run(int argc, char *argv[]) {
         _cleanup_(context_done) Context c = {};
         _cleanup_(sd_varlink_server_unrefp) sd_varlink_server *varlink_server = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

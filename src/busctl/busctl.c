@@ -19,6 +19,7 @@
 #include "bus-util.h"
 #include "busctl-introspect.h"
 #include "capsule-util.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "escape.h"
 #include "fd-util.h"
@@ -2293,6 +2294,8 @@ static int parse_argv(int argc, char *argv[], char ***remaining_args) {
 
 static int run(int argc, char *argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

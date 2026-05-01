@@ -2098,6 +2098,7 @@ static int run(int argc, char *argv[]) {
         int r;
 
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

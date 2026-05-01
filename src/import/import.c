@@ -473,6 +473,7 @@ static int run(int argc, char *argv[]) {
 
         ARCHIVE_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         setlocale(LC_ALL, "");
         log_setup();

@@ -9,6 +9,7 @@
 #include "bus-object.h"
 #include "cgroup-util.h"
 #include "daemon-util.h"
+#include "dlopen-note.h"
 #include "fileio.h"
 #include "log.h"
 #include "main-func.h"
@@ -73,6 +74,8 @@ static int run(int argc, char *argv[]) {
         unsigned long long s = 0;
         CGroupMask mask;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

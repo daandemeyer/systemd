@@ -4569,6 +4569,7 @@ static int run(int argc, char *argv[]) {
 
         LIBBLKID_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

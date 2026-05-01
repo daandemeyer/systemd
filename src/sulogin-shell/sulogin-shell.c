@@ -12,6 +12,7 @@
 #include "bus-locator.h"
 #include "bus-unit-util.h"
 #include "bus-util.h"
+#include "dlopen-note.h"
 #include "env-util.h"
 #include "initrd-util.h"
 #include "log.h"
@@ -105,6 +106,8 @@ static int run(int argc, char *argv[]) {
         };
         bool force = false;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

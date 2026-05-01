@@ -11,6 +11,7 @@
 #include "build.h"
 #include "build-path.h"
 #include "creds-util.h"
+#include "dlopen-note.h"
 #include "dns-rr.h"
 #include "errno-util.h"
 #include "fd-util.h"
@@ -865,6 +866,8 @@ int connect_imdsd(sd_varlink **ret) {
 
 static int run(int argc, char* argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

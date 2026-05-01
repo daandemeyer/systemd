@@ -40,6 +40,7 @@ static int run(int argc, char *argv[]) {
         LIBCRYPTO_NOTE(suggested);
         LIBPCRE2_NOTE(suggested);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         char **args = NULL;
         r = common_parse_argv_full(argc, argv, /* min_args= */ 0, /* max_args= */ 1, &args);

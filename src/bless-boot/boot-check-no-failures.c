@@ -3,6 +3,7 @@
 #include "sd-bus.h"
 
 #include "bus-error.h"
+#include "dlopen-note.h"
 #include "log.h"
 #include "main-func.h"
 #include "verbs.h"
@@ -19,6 +20,8 @@ static int run(int argc, char *argv[]) {
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         uint32_t n;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

@@ -7,6 +7,7 @@
 
 #include "alloc-util.h"
 #include "argv-util.h"
+#include "dlopen-note.h"
 #include "env-util.h"
 #include "errno-util.h"
 #include "fd-util.h"
@@ -494,6 +495,8 @@ static int run(int argc, char *argv[]) {
         _cleanup_(pidref_done) PidRef parent = PIDREF_NULL;
         unsigned n_iterations = 0;
         int m, listen_fd, r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

@@ -90,6 +90,7 @@ static int run(int argc, char *argv[]) {
         LIBKMOD_NOTE(recommended);
         LIBMOUNT_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(recommended);
 
         if (invoked_as(argv, "udevd"))

@@ -14,6 +14,7 @@
 #include "bus-polkit.h"
 #include "common-signal.h"
 #include "daemon-util.h"
+#include "dlopen-note.h"
 #include "env-util.h"
 #include "escape.h"
 #include "event-util.h"
@@ -1717,6 +1718,8 @@ static int manager_startup(Manager *m) {
 
 static int run(int argc, char *argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

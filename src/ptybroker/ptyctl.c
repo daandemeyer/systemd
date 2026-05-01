@@ -8,6 +8,7 @@
 #include "ansi-color.h"
 #include "build.h"
 #include "bus-util.h"
+#include "dlopen-note.h"
 #include "fd-util.h"
 #include "format-table.h"
 #include "json-util.h"
@@ -431,6 +432,8 @@ static int parse_argv(int argc, char *argv[], char ***ret_args) {
 
 static int run(int argc, char *argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

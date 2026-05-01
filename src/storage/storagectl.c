@@ -12,6 +12,7 @@
 #include "argv-util.h"
 #include "build.h"
 #include "bus-util.h"
+#include "dlopen-note.h"
 #include "errno-list.h"
 #include "escape.h"
 #include "extract-word.h"
@@ -711,6 +712,8 @@ static int run_as_mount_helper(int argc, char *argv[]) {
 
 static int run(int argc, char *argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

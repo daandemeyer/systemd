@@ -25,6 +25,7 @@
 #include "bus-unit-util.h"
 #include "bus-util.h"
 #include "constants.h"
+#include "dlopen-note.h"
 #include "efivars.h"
 #include "env-util.h"
 #include "errno-util.h"
@@ -692,6 +693,8 @@ static int run(int argc, char *argv[]) {
         _cleanup_(sleep_config_freep) SleepConfig *sleep_config = NULL;
         char **args = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

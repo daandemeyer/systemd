@@ -18,6 +18,7 @@
 #include "bus-util.h"
 #include "creds-util.h"
 #include "device-util.h"
+#include "dlopen-note.h"
 #include "fd-util.h"
 #include "fs-util.h"
 #include "fsck-util.h"
@@ -287,6 +288,8 @@ static int run(int argc, char *argv[]) {
         bool root_directory;
         struct stat st;
         int r, exit_status;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

@@ -1783,6 +1783,7 @@ static int run(int argc, char **argv) {
         LIBCRYPTO_NOTE(suggested);
         LIBMOUNT_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         arg_sysroot_check = invoked_as(argv, "systemd-sysroot-fstab-check");

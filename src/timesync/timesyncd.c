@@ -10,6 +10,7 @@
 #include "bus-object.h"
 #include "clock-util.h"
 #include "daemon-util.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "fd-util.h"
 #include "format-util.h"
@@ -137,6 +138,8 @@ static int run(int argc, char *argv[]) {
         _cleanup_(manager_freep) Manager *m = NULL;
         _unused_ _cleanup_(notify_on_cleanup) const char *notify_message = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_set_facility(LOG_CRON);
         log_setup();

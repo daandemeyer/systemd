@@ -290,6 +290,7 @@ static int run(const char *dest, const char *dest_early, const char *dest_late) 
         assert_se(arg_dest = dest);
 
         LIBCRYPTO_NOTE(suggested);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         if (in_initrd()) {

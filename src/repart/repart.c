@@ -32,6 +32,7 @@
 #include "devnum-util.h"
 #include "dirent-util.h"
 #include "dissect-image.h"
+#include "dlopen-note.h"
 #include "errno-util.h"
 #include "extract-word.h"
 #include "factory-reset.h"
@@ -11937,6 +11938,7 @@ static int run(int argc, char *argv[]) {
         LIBFDISK_NOTE(required);
         LIBMOUNT_NOTE(required);
         LIBSELINUX_NOTE(recommended);
+        LIBURING_NOTE(suggested);
         TPM2_NOTE(suggested);
 
         log_setup();

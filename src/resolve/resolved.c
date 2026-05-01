@@ -40,6 +40,7 @@ static int run(int argc, char *argv[]) {
         LIBIDN2_NOTE(recommended);
         LIBSELINUX_NOTE(recommended);
         LIBSSL_NOTE(recommended);
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

@@ -6,6 +6,7 @@
 #include "alloc-util.h"
 #include "build.h"
 #include "device-util.h"
+#include "dlopen-note.h"
 #include "efivars.h"
 #include "errno-util.h"
 #include "factory-reset.h"
@@ -327,6 +328,8 @@ static int varlink_service(void) {
 
 static int run(int argc, char *argv[]) {
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

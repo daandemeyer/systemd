@@ -30,6 +30,7 @@
 #include "capability-util.h"
 #include "capsule-util.h"
 #include "chase.h"
+#include "dlopen-note.h"
 #include "env-util.h"
 #include "errno-util.h"
 #include "escape.h"
@@ -3024,6 +3025,8 @@ static int polkit_validate(sd_bus *bus) {
 static int run(int argc, char* argv[]) {
         _cleanup_(sd_bus_flush_close_unrefp) sd_bus *bus = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 

@@ -8,6 +8,7 @@
 #include "alloc-util.h"
 #include "build.h"
 #include "daemon-util.h"
+#include "dlopen-note.h"
 #include "hashmap.h"
 #include "log.h"
 #include "main-func.h"
@@ -157,6 +158,8 @@ static int run(int argc, char *argv[]) {
         _cleanup_(manager_freep) Manager *m = NULL;
         _unused_ _cleanup_(notify_on_cleanup) const char *notify_message = NULL;
         int r;
+
+        LIBURING_NOTE(suggested);
 
         log_setup();
 
