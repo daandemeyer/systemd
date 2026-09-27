@@ -157,6 +157,7 @@ libsystemd_static = static_library(
         link_with : [libc_wrapper_static,
                      libbasic_static],
         dependencies : [libm,
+                        liburing_cflags,
                         libucontext,
                         userspace],
         build_by_default : false)
@@ -259,7 +260,9 @@ libsystemd_tests += [
         },
         {
                 'sources' : files('sd-event/test-event.c'),
+                'dependencies' : liburing_cflags,
                 'timeout' : 120,
+                'io_uring' : true,
         },
         {
                 'sources' : files('sd-journal/test-journal-enum.c'),
