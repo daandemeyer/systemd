@@ -246,6 +246,14 @@ int journal_file_data_payload(
                 size_t data_threshold,
                 const void **ret_data,
                 size_t *ret_size);
+int journal_file_data_payload_pinned(
+                JournalFile *f,
+                uint64_t offset,
+                const char *field,
+                size_t field_length,
+                size_t data_threshold,
+                const void **ret_data,
+                size_t *ret_size);
 
 static inline size_t journal_file_data_payload_offset(JournalFile *f) {
         return JOURNAL_HEADER_COMPACT(f->header)

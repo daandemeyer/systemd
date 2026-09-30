@@ -2069,6 +2069,31 @@ int journal_file_data_payload(
                                         field_length, data_threshold, ret_data, ret_size);
 }
 
+int journal_file_data_payload_pinned(
+                JournalFile *f,
+                uint64_t offset,
+                const char *field,
+                size_t field_length,
+                size_t data_threshold,
+                const void **ret_data,
+                size_t *ret_size) {
+
+        Object *o;
+        int r;
+
+        /* For callers that look the payload up in other files, whose data objects must not unmap it */
+
+        r = journal_file_move_to_object(f, OBJECT_DATA, offset, &o);
+        if (r < 0)
+                return r;
+
+        r = journal_file_pin_object(f, o);
+        if (r < 0)
+                return r;
+
+        return journal_file_data_payload(f, o, offset, field, field_length, data_threshold, ret_data, ret_size);
+}
+
 uint64_t journal_file_entry_n_items(JournalFile *f, Object *o) {
         uint64_t sz;
 
