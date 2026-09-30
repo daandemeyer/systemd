@@ -56,6 +56,7 @@ in particular realize that they may include binary non-text data (though usually
 and the same field might have multiple values assigned within the same entry.
 
 This document describes the current format of systemd 246.
+The segmented variant of the format is described in [Segmented Journal File Format](JOURNAL_SEGMENTED.md).
 The documented format is compatible with the format used in the first versions of the journal,
 but received various compatible and incompatible additions since.
 
