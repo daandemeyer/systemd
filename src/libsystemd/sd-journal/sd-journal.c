@@ -3,7 +3,9 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <stdlib.h>
+#include <sys/epoll.h>
 #include <sys/inotify.h>
+#include <sys/timerfd.h>
 #include <sys/vfs.h>
 #include <unistd.h>
 
@@ -1740,7 +1742,8 @@ static void track_file_disposition(sd_journal *j, JournalFile *f) {
 static int add_any_file(
                 sd_journal *j,
                 int fd,
-                const char *path) {
+                const char *path,
+                JournalFile **ret) {
 
         _cleanup_close_ int our_fd = -EBADF;
         _cleanup_free_ char *resolved_path = NULL;
@@ -1808,6 +1811,9 @@ static int add_any_file(
                                         f->segmented->refresh_pending = true;
 
                                 (void) journal_file_read_tail_timestamp(j, f, /* refresh= */ true);
+
+                                if (ret)
+                                        *ret = f;
                                 return 0;
                         }
 
@@ -1854,6 +1860,8 @@ static int add_any_file(
 
         log_debug("File %s added.", f->path);
 
+        if (ret)
+                *ret = f;
         return 0;
 
 error:
@@ -1899,7 +1907,8 @@ int journal_get_directories(sd_journal *j, char ***ret) {
 static int add_file_by_name(
                 sd_journal *j,
                 const char *prefix,
-                const char *filename) {
+                const char *filename,
+                JournalFile **ret) {
 
         _cleanup_free_ char *path = NULL;
 
@@ -1907,17 +1916,41 @@ static int add_file_by_name(
         assert(prefix);
         assert(filename);
 
-        if (j->no_new_files)
-                return 0;
-
-        if (!file_type_wanted(j->flags, filename))
+        if (!j->no_new_files && !file_type_wanted(j->flags, filename))
                 return 0;
 
         path = path_join(prefix, filename);
         if (!path)
                 return -ENOMEM;
 
-        return add_any_file(j, /* fd= */ -EBADF, path);
+        if (j->no_new_files) {
+                /* No files are added. Look the file up, so that the caller knows whether it is segmented.
+                 * This may be due to an inotify event, so skip the refresh rate limit, as add_any_file()
+                 * does. */
+                JournalFile *f = ordered_hashmap_get(j->files, path);
+                if (f && f->segmented)
+                        f->segmented->refresh_pending = true;
+                if (ret)
+                        *ret = f;
+                return 0;
+        }
+
+        return add_any_file(j, /* fd= */ -EBADF, path, ret);
+}
+
+static int directory_add_file(sd_journal *j, Directory *d, const char *filename, JournalFile **ret) {
+        int r;
+
+        assert(d);
+
+        r = add_file_by_name(j, d->path, filename, ret);
+        if (IN_SET(r, -ENODATA, -EBADMSG))
+                /* Maybe not written completely yet. That might happen during a holdoff, without an event. */
+                (void) set_put_strdup(&d->incomplete, filename);
+        else
+                free(set_remove(d->incomplete, filename));
+
+        return r;
 }
 
 static int remove_file_by_name(
@@ -2111,6 +2144,8 @@ static Directory* directory_free(Directory *d) {
                 free(d->path);
         }
 
+        safe_closedir(d->suppressed);
+        set_free(d->incomplete);
         return mfree(d);
 }
 
@@ -2191,7 +2226,7 @@ static void directory_enumerate(sd_journal *j, Directory *m, DIR *d) {
 
         FOREACH_DIRENT_ALL(de, d, goto fail) {
                 if (dirent_is_journal_file(de))
-                        (void) add_file_by_name(j, m->path, de->d_name);
+                        (void) directory_add_file(j, m, de->d_name, /* ret= */ NULL);
 
                 if (m->is_root && dirent_is_journal_subdir(de))
                         (void) add_directory(j, m->path, de->d_name);
@@ -2222,6 +2257,7 @@ static void directory_watch(sd_journal *j, Directory *m, int fd, uint32_t mask) 
                 return;
         }
 
+        m->mask = mask;
 
         r = hashmap_ensure_put(&j->directories_by_wd, &directories_by_wd_hash_ops, INT_TO_PTR(m->wd), m);
         if (r < 0) {
@@ -2437,7 +2473,156 @@ static int allocate_inotify(sd_journal *j) {
                         return -errno;
         }
 
+        if (j->epoll_fd < 0) {
+                _cleanup_close_ int fd = -EBADF;
+
+                fd = epoll_create1(EPOLL_CLOEXEC);
+                if (fd < 0)
+                        return -errno;
+
+                if (epoll_ctl(fd, EPOLL_CTL_ADD, j->inotify_fd, &(struct epoll_event) { .events = EPOLLIN }) < 0)
+                        return -errno;
+
+                j->epoll_fd = TAKE_FD(fd);
+        }
+
         return 0;
+}
+
+/* Writers of segmented files trigger IN_MODIFY for each entry, journald only every 250ms for classic
+ * files. To not wake up clients more often, IN_MODIFY is dropped from the watch after an event, and
+ * restored when the holdoff timer elapses. */
+
+#define HOLDOFF_USEC (250 * USEC_PER_MSEC)
+
+static int directory_watch_mask(sd_journal *j, Directory *d, DIR *dir, uint32_t mask) {
+        int wd;
+
+        assert(j);
+        assert(d);
+        assert(dir);
+
+        /* Without IN_MASK_ADD, adding the watch again replaces its mask. */
+
+        wd = inotify_add_watch_fd(j->inotify_fd, dirfd(dir), mask);
+        if (wd < 0)
+                return wd;
+        if (wd != d->wd) {
+                Directory *other = hashmap_get(j->directories_by_wd, INT_TO_PTR(wd));
+
+                /* The watch was removed, leave it to the regular inotify processing. If the directory is
+                 * watched as another one, its mask was just replaced, so put it back. */
+                if (other)
+                        (void) inotify_add_watch_fd(j->inotify_fd, dirfd(dir),
+                                                    other->suppressed ? other->mask & ~IN_MODIFY : other->mask);
+                else
+                        (void) inotify_rm_watch(j->inotify_fd, wd);
+                return -EBUSY;
+        }
+
+        return 0;
+}
+
+static int journal_holdoff_timer_arm(sd_journal *j) {
+        assert(j);
+
+        if (j->timer_fd < 0) {
+                _cleanup_close_ int fd = -EBADF;
+
+                fd = timerfd_create(CLOCK_MONOTONIC, TFD_NONBLOCK|TFD_CLOEXEC);
+                if (fd < 0)
+                        return log_debug_errno(errno, "Failed to create timer, not delaying wakeups: %m");
+
+                if (epoll_ctl(j->epoll_fd, EPOLL_CTL_ADD, fd, &(struct epoll_event) { .events = EPOLLIN }) < 0)
+                        return log_debug_errno(errno, "Failed to watch timer, not delaying wakeups: %m");
+
+                j->timer_fd = TAKE_FD(fd);
+        }
+
+        if (!j->holdoff_armed) {
+                struct itimerspec its = {};
+
+                timespec_store(&its.it_value, HOLDOFF_USEC);
+
+                if (timerfd_settime(j->timer_fd, 0, &its, NULL) < 0)
+                        return log_debug_errno(errno, "Failed to arm timer, not delaying wakeups: %m");
+
+                j->holdoff_armed = true;
+        }
+
+        return 0;
+}
+
+static void journal_holdoff_arm(sd_journal *j, Directory *d) {
+        _cleanup_closedir_ DIR *dir = NULL;
+        int r;
+
+        assert(j);
+        assert(d);
+
+        if (d->wd < 0 || d->suppressed)
+                return;
+
+        if (journal_holdoff_timer_arm(j) < 0)
+                return;
+
+        /* Kept open, so that the watch can be restored even if the directory is renamed meanwhile */
+        r = directory_open(j, d->path, &dir);
+        if (r >= 0)
+                r = directory_watch_mask(j, d, dir, d->mask & ~IN_MODIFY);
+        if (r < 0) {
+                log_debug_errno(r, "Failed to change watch of '%s', ignoring: %m", d->path);
+                return;
+        }
+
+        d->suppressed = TAKE_PTR(dir);
+}
+
+static void journal_holdoff_release(sd_journal *j) {
+        JournalFile *f;
+        Directory *d;
+        bool again = false;
+        int r;
+
+        assert(j);
+
+        HASHMAP_FOREACH(d, j->directories_by_path) {
+                if (!d->suppressed)
+                        continue;
+
+                r = directory_watch_mask(j, d, d->suppressed, d->mask);
+                if (r < 0) {
+                        log_debug_errno(r, "Failed to restore watch of '%s', ignoring: %m", d->path);
+
+                        /* Try again the next time the timer elapses, unless the watch was removed, which the
+                         * regular inotify processing takes care of. */
+                        if (r != -EBUSY) {
+                                again = true;
+                                continue;
+                        }
+                }
+
+                d->suppressed = safe_closedir(d->suppressed);
+
+                /* Retry only once. A file that still cannot be opened is damaged. */
+                const char *name;
+                SET_FOREACH(name, d->incomplete)
+                        (void) add_file_by_name(j, d->path, name, /* ret= */ NULL);
+                d->incomplete = set_free(d->incomplete);
+        }
+
+        /* Catch up with the IN_MODIFY events that were suppressed during the holdoff. Not only iteration
+         * looks at the files, enumeration and cutoff queries do too. */
+        ORDERED_HASHMAP_FOREACH(f, j->files)
+                if (f->segmented) {
+                        f->segmented->refresh_pending = true;
+                        (void) journal_file_read_tail_timestamp(j, f, /* refresh= */ true);
+                }
+
+        j->holdoff_armed = false;
+
+        if (again)
+                (void) journal_holdoff_timer_arm(j);
 }
 
 static sd_journal *journal_new(int flags, const char *path, const char *namespace) {
@@ -2451,6 +2636,8 @@ static sd_journal *journal_new(int flags, const char *path, const char *namespac
                 .origin_id = origin_id_query(),
                 .toplevel_fd = -EBADF,
                 .inotify_fd = -EBADF,
+                .epoll_fd = -EBADF,
+                .timer_fd = -EBADF,
                 .flags = flags,
                 .data_threshold = DEFAULT_DATA_THRESHOLD,
         };
@@ -2607,7 +2794,7 @@ _public_ int sd_journal_open_files(sd_journal **ret, const char **paths, int fla
                 return -ENOMEM;
 
         STRV_FOREACH(path, paths) {
-                r = add_any_file(j, /* fd= */ -EBADF, *path);
+                r = add_any_file(j, /* fd= */ -EBADF, *path, /* ret= */ NULL);
                 if (r < 0)
                         return r;
         }
@@ -2691,7 +2878,7 @@ _public_ int sd_journal_open_files_fd(sd_journal **ret, int fds[], unsigned n_fd
                 if (r < 0)
                         goto fail;
 
-                r = add_any_file(j, fds[i], /* path= */ NULL);
+                r = add_any_file(j, fds[i], /* path= */ NULL, /* ret= */ NULL);
                 if (r < 0)
                         goto fail;
         }
@@ -2733,6 +2920,8 @@ _public_ void sd_journal_close(sd_journal *j) {
                 safe_close(j->toplevel_fd);
 
         safe_close(j->inotify_fd);
+        safe_close(j->epoll_fd);
+        safe_close(j->timer_fd);
 
         if (j->mmap)
                 mmap_cache_unref(j->mmap);
@@ -3201,8 +3390,8 @@ _public_ int sd_journal_get_fd(sd_journal *j) {
         if (j->no_inotify)
                 return -EMEDIUMTYPE;
 
-        if (j->inotify_fd >= 0)
-                return j->inotify_fd;
+        if (j->inotify_fd >= 0 && j->epoll_fd >= 0)
+                return j->epoll_fd;
 
         r = allocate_inotify(j);
         if (r < 0)
@@ -3215,7 +3404,7 @@ _public_ int sd_journal_get_fd(sd_journal *j) {
         if (r < 0)
                 return r;
 
-        return j->inotify_fd;
+        return j->epoll_fd;
 }
 
 _public_ int sd_journal_get_events(sd_journal *j) {
@@ -3296,6 +3485,27 @@ static void process_q_overflow(sd_journal *j) {
         log_debug("Reiteration complete.");
 }
 
+static bool file_maybe_segmented(sd_journal *j, const char *prefix, const char *filename) {
+        _cleanup_free_ char *path = NULL;
+        _cleanup_close_ int fd = -EBADF;
+
+        /* For files that are not tracked. Their writers might also wake us up for each entry. Files that
+         * cannot be opened count as classic, so that nothing changes for readers of classic files. */
+
+        path = path_join(prefix, filename);
+        if (!path)
+                return false;
+
+        if (j->toplevel_fd >= 0)
+                fd = openat(j->toplevel_fd, skip_leading_slash(path), O_RDONLY|O_CLOEXEC|O_NONBLOCK);
+        else
+                fd = open(path, O_RDONLY|O_CLOEXEC|O_NONBLOCK);
+        if (fd < 0)
+                return false;
+
+        return journal_file_fd_is_segmented(fd);
+}
+
 static void process_inotify_event(sd_journal *j, const struct inotify_event *e) {
         Directory *d;
 
@@ -3316,10 +3526,18 @@ static void process_inotify_event(sd_journal *j, const struct inotify_event *e) 
 
                         /* Event for a journal file */
 
-                        if (e->mask & (IN_CREATE|IN_MOVED_TO|IN_MODIFY|IN_ATTRIB))
-                                (void) add_file_by_name(j, d->path, e->name);
-                        else if (e->mask & (IN_DELETE|IN_MOVED_FROM|IN_UNMOUNT))
+                        if (e->mask & (IN_CREATE|IN_MOVED_TO|IN_MODIFY|IN_ATTRIB)) {
+                                JournalFile *f = NULL;
+
+                                (void) directory_add_file(j, d, e->name, &f);
+
+                                if ((e->mask & IN_MODIFY) &&
+                                    (f ? !!f->segmented : file_maybe_segmented(j, d->path, e->name)))
+                                        journal_holdoff_arm(j, d);
+                        } else if (e->mask & (IN_DELETE|IN_MOVED_FROM|IN_UNMOUNT)) {
+                                free(set_remove(d->incomplete, e->name));
                                 (void) remove_file_by_name(j, d->path, e->name);
+                        }
 
                 } else if (!d->is_root && e->len == 0) {
 
@@ -3370,6 +3588,15 @@ _public_ int sd_journal_process(sd_journal *j) {
         j->last_process_usec = now(CLOCK_MONOTONIC);
         j->last_invalidate_counter = j->current_invalidate_counter;
 
+        if (j->timer_fd >= 0) {
+                uint64_t expirations;
+
+                if (read(j->timer_fd, &expirations, sizeof(expirations)) == sizeof(expirations)) {
+                        journal_holdoff_release(j);
+                        got_something = true;
+                }
+        }
+
         for (;;) {
                 union inotify_event_buffer buffer;
                 ssize_t l;
@@ -3397,7 +3624,7 @@ _public_ int sd_journal_wait(sd_journal *j, uint64_t timeout_usec) {
         assert_return(!journal_origin_changed(j), -ECHILD);
         assert_return(!FLAGS_SET(j->flags, SD_JOURNAL_ASSUME_IMMUTABLE), -EUNATCH);
 
-        if (j->inotify_fd < 0) {
+        if (j->inotify_fd < 0 || j->epoll_fd < 0) {
                 JournalFile *f;
 
                 /* This is the first invocation, hence create the inotify watch */
@@ -3432,7 +3659,7 @@ _public_ int sd_journal_wait(sd_journal *j, uint64_t timeout_usec) {
         }
 
         do {
-                r = fd_wait_for_event(j->inotify_fd, POLLIN, timeout_usec);
+                r = fd_wait_for_event(j->epoll_fd, POLLIN, timeout_usec);
         } while (r == -EINTR);
 
         if (r < 0)

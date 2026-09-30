@@ -58,7 +58,10 @@ typedef struct Directory {
         sd_journal *journal;
         char *path;
         int wd;
+        uint32_t mask;
         bool is_root;
+        DIR *suppressed;  /* open while IN_MODIFY is removed from the watch, see journal_holdoff_arm() */
+        Set *incomplete;  /* files that could not be opened yet, retried one time when the holdoff ends */
         unsigned last_seen_generation;
 } Directory;
 
@@ -94,6 +97,9 @@ typedef struct sd_journal {
         uint64_t origin_id;
 
         int inotify_fd;
+        int epoll_fd;  /* returned by sd_journal_get_fd(), holds inotify_fd and timer_fd */
+        int timer_fd;
+        bool holdoff_armed;
         unsigned current_invalidate_counter, last_invalidate_counter;
         usec_t last_process_usec;
         unsigned generation;
