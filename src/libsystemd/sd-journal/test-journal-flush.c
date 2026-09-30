@@ -199,4 +199,10 @@ TEST(journal_flush_compact) {
         test_journal_flush_one(saved_argc, saved_argv);
 }
 
+TEST(journal_flush_segmented) {
+        ASSERT_OK_ERRNO(setenv("SYSTEMD_JOURNAL_SEGMENTED", "1", 1));
+        test_journal_flush_one(saved_argc, saved_argv);
+        ASSERT_OK_ERRNO(unsetenv("SYSTEMD_JOURNAL_SEGMENTED"));
+}
+
 DEFINE_TEST_MAIN(LOG_INFO);
