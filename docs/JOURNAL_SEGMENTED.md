@@ -92,6 +92,7 @@ An index answers the questions that the classic format answers with its hash tab
 * Which entries are in the segment? The *entry array* lists their offsets, in order.
 * Which fields occur? The *field table* lists their names.
 * Which entries have `FIELD=value`? The *data table* has one item per distinct value.
+  Values of a few fields are handled differently, see "Storage Classes".
   An item holds the offset of a data object with that value, and a *posting list* of the entries that have it.
 
 The *ordinal* of an entry is its position among all entries of the file. Posting lists hold ordinals relative to the segment.
@@ -254,6 +255,37 @@ The replaced indexes stay in the file, unused. If building the merged index fail
 If writing the merged index or the final mark fails, or the process dies while archiving, the file has no final mark,
 like the file of a writer that crashed. It stays readable, and readers treat it like an active file.
 
+## Storage Classes
+
+In 300,000 entries of a desktop journal there are 365,204 distinct values, and 349,831 of them belong to `MESSAGE=` and the `*_TIMESTAMP=` fields.
+Source timestamps are unique to their entry. 84% of the messages repeat, but the other 16% are unique, like source timestamps.
+Indexing such values costs a data table item of 32 bytes per segment, and again in the merged index, for values that are rarely looked up.
+The writer hence assigns each field a *storage class*:
+
+| Class | Fields | Stored as | In the index |
+|---|---|---|---|
+| Indexed | all others | data object | data table item with posting list |
+| Unindexed | `MESSAGE`, `SYSLOG_TIMESTAMP`, `SYSLOG_RAW`, `COREDUMP` | data object with the `OBJECT_UNINDEXED` flag | hash of the value |
+| Inline | `_SOURCE_REALTIME_TIMESTAMP`, `_SOURCE_MONOTONIC_TIMESTAMP`, `_SOURCE_BOOTTIME_TIMESTAMP` | inside the entry object if smaller than 256 bytes, otherwise like unindexed | a flag on the field |
+
+Unindexed values are deduplicated like indexed ones, but are never part of a context. Inline values are not deduplicated.
+The list of fields is writer policy. Readers only go by what is in the file. A value of an indexed or unindexed field that exists in the segment already is reused with the class it has.
+
+Two flags in the field table say whether a segment has unindexed or inline values of a field. A match on such a value may have to read entries:
+
+* For an unindexed field, the index knows whether the hash of the value occurs in the segment, but not in which entries.
+  If it occurs, all entries of the segment are candidates.
+* For a field with inline values, all entries of the segment are candidates.
+
+The match result is then a superset. A second bitmap records which candidates were checked, so results take 2 bits per entry instead of 1.
+When iteration reaches a candidate that was not checked, it reads the entry and checks it against the whole expression.
+An archived file usually has a single index, which covers all entries. There, a match on only an unindexed value hence reads all entries or none, and a match on only an inline value reads all entries.
+Listing the unique values of such a field reads all objects of the segments that have it unindexed or inline.
+No code in the systemd tree matches on these fields. `journalctl FIELD=value` and `systemd-journal-gatewayd` pass user supplied matches through.
+
+On the same input, storage classes cut the bytes written back from 91 MiB to 62 MiB, and the size of all files from 88 MiB to 60 MiB.
+Cold matches on messages went from 102 ms to 263 ms, and on source timestamps from 15 ms to 584 ms.
+
 ## Sealing and Verification
 
 Forward secure sealing works as before.
@@ -286,7 +318,7 @@ Each index that a reader would use is rebuilt from the log and compared: entries
   That is the maximum append latency in "Measurements". Merging at archiving time happens in the separate thread that also syncs files.
 * **One system call per entry.** The writer uses `pwritev()` instead of writing to the memory map.
   That is one system call per entry, but all writes are sequential, and a page does not change once it is full. Only the last, partly filled page may be written back more than once.
-* **Every value is indexed.** Values that are unique to an entry, such as source timestamps, cost a data table item of 32 bytes per segment, and again in the merged index.
+* **Storage classes.** Not indexing messages and source timestamps makes files smaller, but matches on them have to read entries.
 
 ## Measurements
 
@@ -299,24 +331,24 @@ Each format rotates into several files. Sizes and byte counts are totals over al
 
 | Writing | classic | compact | segmented |
 |---|---|---|---|
-| Bytes written back | 1141 MiB | 952 MiB | 91 MiB |
-| Dirty pages per writeback | 368 | 307 | 30.6 |
+| Bytes written back | 1140 MiB | 953 MiB | 62 MiB |
+| Dirty pages per writeback | 368 | 307 | 21.3 |
 | Dirty ranges per writeback | 156 | 125 | 1.0 |
-| Size of all files | 264 MiB | 176 MiB | 88 MiB |
-| Append CPU time per entry | 26.6 us | 16.3 us | 14.1 us |
-| Append latency, maximum | 11.4 ms | 11.5 ms | 20.5 ms |
-| Write time | 8.8 s | 5.9 s | 4.4 s |
+| Size of all files | 264 MiB | 176 MiB | 60 MiB |
+| Append CPU time per entry | 27.1 us | 16.0 us | 12.6 us |
+| Append latency, maximum | 15.1 ms | 11.5 ms | 21.1 ms |
+| Write time | 8.9 s | 5.5 s | 4.0 s |
 
 | Reading, cold cache unless noted | classic | compact | segmented |
 |---|---|---|---|
-| Last 10 entries | 38.7 ms | 33.5 ms | 13.0 ms |
-| Match on a rare unit | 49.1 ms | 40.0 ms | 29.9 ms |
-| Match on `MESSAGE=` | 136 ms | 110 ms | 102 ms |
-| Match on `_SOURCE_REALTIME_TIMESTAMP=` | 33 ms | 34 ms | 15 ms |
-| Unique values of `_SYSTEMD_UNIT=` | 66 ms | 45 ms | 29 ms |
-| `--grep` over all messages | 1074 ms | 1035 ms | 738 ms |
-| Iterate all entries with all fields, warm cache | 2.71 s | 2.72 s | 2.98 s |
-| Follow at 1,000 entries/s: wakeups per second | 4.0 | 4.0 | 6.0 |
+| Last 10 entries | 40.2 ms | 37.4 ms | 7.5 ms |
+| Match on a rare unit | 53.3 ms | 40.7 ms | 26.9 ms |
+| Match on `MESSAGE=` | 158 ms | 112 ms | 263 ms |
+| Match on `_SOURCE_REALTIME_TIMESTAMP=` | 29 ms | 31 ms | 584 ms |
+| Unique values of `_SYSTEMD_UNIT=` | 68 ms | 47 ms | 21 ms |
+| `--grep` over all messages | 1099 ms | 1049 ms | 716 ms |
+| Iterate all entries with all fields, warm cache | 2.74 s | 2.80 s | 2.94 s |
+| Follow at 1,000 entries/s: wakeups per second | 4.0 | 4.0 | 7.6 |
 
 ## On-Disk Reference
 
@@ -335,7 +367,7 @@ Objects are aligned to 8 bytes, padding is zero. A future object type needs a ne
 | `ENTRY` | 3 | 72 | all |
 | `TAG` | 7 | 64 | all |
 | `CONTEXT` | 8 | 20 | all |
-| `INDEX` | 9 | 152 | `struct IndexObject` without the payload |
+| `INDEX` | 9 | 160 | `struct IndexObject` without the payload |
 | `MARK` | 10 | 32 | all |
 
 * `checksum` is the lower 32 bits of `siphash24()` keyed with `file_id`, over the offset as `le64_t` and the covered part, with `checksum` taken as 0.
@@ -344,6 +376,7 @@ Objects are aligned to 8 bytes, padding is zero. A future object type needs a ne
 * `payload_checksum` of an index is the lower 32 bits of `siphash24()` keyed with `file_id`, over the object from `payload` to its end.
 
 A `DATA` object is the object header, `le64_t hash`, and the payload `FIELD=value` of at least 1 byte, possibly compressed.
+Data objects of unindexed values have the flag `OBJECT_UNINDEXED` (bit 3), and the data table has no items for them.
 A `CONTEXT` object is the object header followed by `aux` offsets (`le32_t`) of `DATA` objects, strictly ascending, at most 1024.
 
 ```c
@@ -357,6 +390,7 @@ struct IndexObject {
         le32_t n_index_entries, entry_array_offset;     /* le32_t, the offsets of the entries, ascending */
         le32_t n_fields, field_table_offset;            /* IndexFieldItem, sorted by hash, then name */
         le32_t n_data_items, data_table_offset;         /* IndexDataItem, by field, then sorted by (hash, hash2) */
+        le32_t n_unindexed, unindexed_offset;           /* le64_t, the hashes of the unindexed values, ascending */
         le32_t payload_checksum, reserved;
         uint8_t payload[];
 };
@@ -364,7 +398,7 @@ struct IndexObject {
 struct IndexFieldItem {
         le64_t hash;
         le32_t name_offset, name_size;  /* the name, without "=" */
-        le32_t flags;
+        le32_t flags;                   /* INDEX_FIELD_UNINDEXED (1), INDEX_FIELD_INLINE (2) */
         le32_t n_data, first_data;      /* the values of the field in the data table */
         le32_t reserved;
 };
@@ -383,15 +417,16 @@ struct MarkObject {
 };
 ```
 
-An `ENTRY` object is a compact classic entry object of `64 + ALIGN8(4 * aux)` bytes.
+An `ENTRY` object is a compact classic entry object of `64 + ALIGN8(4 * aux)` bytes, plus its inline values.
 An item is `offset | tag`, with the tag in the three low bits. Tag 0 is a `DATA` object, tag 1 a `CONTEXT` object whose data the entry has, at most one per entry.
-Tags 2 to 7 are not used. Items ascend strictly.
+Tag 2 is an inline value, with the offset relative to the entry object. Inline values follow the items, each aligned to 8 bytes:
+a `le32_t` size of at least 1, then the payload, never compressed. Tags 3 to 7 are not used. Items ascend strictly.
 `xor_hash` is the value a classic keyed hash file has: the XOR of `jenkins_hash64()` over the payloads that the entry was written with.
 
 An index covers the log from `head_offset` up to its own offset, a range of at least one object.
 The ordinal of its first entry is `n_entries - n_index_entries`. Section offsets are relative to the object and multiples of 8.
-Field `flags` and all `reserved` fields are 0.
-The data table has one item per distinct `(hash, hash2)` among the data that the entries refer to, directly or through contexts.
+All `reserved` fields are 0.
+The data table has one item per distinct `(hash, hash2)` among the indexed data that the entries refer to, directly or through contexts.
 Posting lists hold ordinals relative to the index, ascending. Posting lists that are not inline follow each other in the order of the data table and do not overlap:
 
 | Encoding | Format |
